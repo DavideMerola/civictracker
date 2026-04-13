@@ -36,7 +36,7 @@
 
     <script type="text/babel">
         // Estraiamo gli hook da React
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         // Implementazione delle icone come semplici SVG per non dipendere dalla libreria React di Lucide
         // che in versione standalone è complessa da usare
@@ -70,7 +70,90 @@
         const Menu = (p) => <Icon name="menu" {...p} />;
         const Layers = (p) => <Icon name="layers" {...p} />;
         const ImageIcon = (p) => <Icon name="image" {...p} />;
+        const ZoomIn = (p) => <Icon name="zoom-in" {...p} />;
+        const ZoomOut = (p) => <Icon name="zoom-out" {...p} />;
+        const Calendar = (p) => <Icon name="calendar" {...p} />;
 
+        // Componente visualizzatore immagini con Zoom e Trascinamento
+        const ImageViewer = ({ imageObj, onClose }) => {
+            const [scale, setScale] = useState(1);
+            const [pos, setPos] = useState({ x: 0, y: 0 });
+            const isDragging = useRef(false);
+            const startPos = useRef({ x: 0, y: 0 });
+
+            // Gestione nativa del tocco per spostare l'immagine zoomata
+            const handlePointerDown = (e) => {
+                if (scale === 1) return; 
+                isDragging.current = true;
+                startPos.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+                e.target.setPointerCapture(e.pointerId);
+            };
+            
+            const handlePointerMove = (e) => {
+                if (!isDragging.current) return;
+                setPos({ x: e.clientX - startPos.current.x, y: e.clientY - startPos.current.y });
+            };
+            
+            const handlePointerUp = (e) => {
+                isDragging.current = false;
+                if (e.target.hasPointerCapture(e.pointerId)) {
+                    e.target.releasePointerCapture(e.pointerId);
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/95 z-[200] flex items-center justify-center overflow-hidden touch-none" onClick={onClose}>
+                    {/* Header: Date & Close */}
+                    <div className="absolute top-6 left-4 right-4 flex justify-between items-center z-50" onClick={e => e.stopPropagation()}>
+                        <div className="bg-black/60 text-white px-4 py-2 rounded-xl text-xs font-bold backdrop-blur border border-white/20 flex items-center gap-2">
+                            <Calendar size={14} /> 
+                            {imageObj.date ? imageObj.date : 'Data non disponibile'}
+                        </div>
+                        <button onClick={onClose} className="bg-black/60 hover:bg-white/30 text-white p-3 rounded-full backdrop-blur border border-white/20 shadow-xl">
+                            <X size={20} />
+                        </button>
+                    </div>
+                    
+                    {/* Image Container */}
+                    <div className="w-full h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                        <img 
+                            src={imageObj.photo} 
+                            alt="Zoomed" 
+                            className="max-w-full max-h-[80vh] object-contain"
+                            style={{ 
+                                transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
+                                transition: isDragging.current ? 'none' : 'transform 0.1s ease-out',
+                                cursor: scale > 1 ? 'grab' : 'default'
+                            }}
+                            onPointerDown={handlePointerDown}
+                            onPointerMove={handlePointerMove}
+                            onPointerUp={handlePointerUp}
+                            onPointerCancel={handlePointerUp}
+                            draggable="false"
+                        />
+                    </div>
+
+                    {/* Controls (Zoom) */}
+                    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-6 bg-black/60 p-2 rounded-full backdrop-blur z-50 border border-white/20 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <button 
+                            onClick={() => { setScale(prev => Math.max(1, prev - 0.5)); if(scale <= 1.5) setPos({x:0, y:0}); }} 
+                            className="p-3 text-white active:scale-90 transition-transform"
+                        >
+                            <ZoomOut size={24} />
+                        </button>
+                        <div className="flex items-center justify-center w-12 text-yellow-400 font-black text-lg">
+                            {scale}x
+                        </div>
+                        <button 
+                            onClick={() => setScale(prev => Math.min(4, prev + 0.5))} 
+                            className="p-3 text-white active:scale-90 transition-transform"
+                        >
+                            <ZoomIn size={24} />
+                        </button>
+                    </div>
+                </div>
+            );
+        };
 
         const App = () => {
             // --- Stato Persistente ---
@@ -93,7 +176,7 @@
 
             // Form Nominativo
             const [formMode, setFormMode] = useState(null); 
-            const [formState, setFormState] = useState({ name: '', status: 'residente', civico: '' });
+            const [formState, setFormState] = useState({ name: '', status: 'residente', civico: '', posCassetta: '' });
             
             const [notification, setNotification] = useState(null);
 
@@ -167,7 +250,7 @@
             };
 
             const handleSaveResident = () => {
-                const { name, status, civico } = formState;
+                const { name, status, civico, posCassetta } = formState;
                 if (!name || !civico) return notify("Compila Nome e Civico");
 
                 setData(prev => {
@@ -183,15 +266,16 @@
                         if (formMode.civico !== civico) {
                             street.civici[formMode.civico].residents.splice(idx, 1);
                             if (!street.civici[civico]) street.civici[civico] = { residents: [], photo: null };
-                            street.civici[civico].residents.push({ ...formMode.data, name: name.toUpperCase(), status });
+                            street.civici[civico].residents.push({ ...formMode.data, name: name.toUpperCase(), status, posCassetta });
                         } else {
-                            street.civici[civico].residents[idx] = { ...formMode.data, name: name.toUpperCase(), status };
+                            street.civici[civico].residents[idx] = { ...formMode.data, name: name.toUpperCase(), status, posCassetta };
                         }
                     } else {
                         street.civici[civico].residents.push({
                             id: Date.now(),
                             name: name.toUpperCase(),
                             status,
+                            posCassetta: posCassetta || '',
                             date: new Date().toLocaleDateString()
                         });
                     }
@@ -202,11 +286,11 @@
                 setView('street-detail');
                 notify("Salvato con successo");
             };
-
-            const updateCivicoPhoto = (civico, photo) => {
+            const updateCivicoPhoto = (civico, photo, photoDate) => {
                 setData(prev => {
                     const newData = { ...prev };
                     newData.zones[activeZone].streets[activeStreet].civici[civico].photo = photo;
+                    newData.zones[activeZone].streets[activeStreet].civici[civico].photoDate = photoDate;
                     return newData;
                 });
             };
@@ -269,25 +353,7 @@
                 <div className="min-h-screen pb-24">
                     {/* --- MODAL IMMAGINE INGRANDITA --- */}
                     {zoomedImage && (
-                        <div 
-                            className="fixed inset-0 bg-black/95 z-[200] flex items-center justify-center p-4 backdrop-blur-sm"
-                            onClick={() => setZoomedImage(null)}
-                        >
-                            <div className="relative max-w-full max-h-full flex flex-col items-center">
-                                <button 
-                                    className="absolute -top-14 right-0 text-white bg-white/20 hover:bg-white/40 p-3 rounded-full transition-colors"
-                                    onClick={() => setZoomedImage(null)}
-                                >
-                                    <X size={24} />
-                                </button>
-                                <img 
-                                    src={zoomedImage} 
-                                    alt="Zoomed" 
-                                    className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
-                                    onClick={(e) => e.stopPropagation()} 
-                                />
-                            </div>
-                        </div>
+                        <ImageViewer imageObj={zoomedImage} onClose={() => setZoomedImage(null)} />
                     )}
 
                     {/* Sidebar Overlay */}
@@ -444,7 +510,7 @@
 
                                 <button 
                                     onClick={() => {
-                                        setFormState({ name: '', status: 'residente', civico: civicoFilter });
+                                        setFormState({ name: '', status: 'residente', civico: civicoFilter, posCassetta: '' });
                                         setFormMode({ type: 'add' });
                                         setView('form');
                                     }}
@@ -459,27 +525,27 @@
                                         return (
                                             <div key={cNum} className="bg-white rounded-[2rem] overflow-hidden shadow-md border border-slate-100">
                                                 {/* Header Civico con Immagine */}
-                                                <div className="h-40 relative bg-slate-200">
+                                                <div className="h-24 relative bg-slate-200">
                                                     {civicoData.photo ? (
                                                         <img 
                                                             src={civicoData.photo} 
                                                             className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" 
                                                             alt="civico" 
-                                                            onClick={() => setZoomedImage(civicoData.photo)} 
+                                                            onClick={() => setZoomedImage({ photo: civicoData.photo, date: civicoData.photoDate })} 
                                                         />
                                                     ) : (
-                                                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
-                                                            <ImageIcon size={32} />
-                                                            <span className="text-[10px] font-black uppercase mt-1">Carica Foto Citofono</span>
+                                                        <div className="w-full h-full flex flex-row gap-2 items-center justify-center text-slate-400 opacity-50">
+                                                            <ImageIcon size={24} />
+                                                            <span className="text-[10px] font-black uppercase">Foto Citofono</span>
                                                         </div>
                                                     )}
-                                                    <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur px-4 py-1 rounded-full text-white font-black italic pointer-events-none">
+                                                    <div className="absolute top-2 left-4 bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full text-white text-xs font-black italic pointer-events-none">
                                                         CIVICO {cNum}
                                                     </div>
                                                     
                                                     {/* Bottone per Caricare/Scattare Foto. */}
-                                                    <label className="absolute bottom-4 right-4 bg-yellow-400 text-black p-3 rounded-2xl shadow-xl cursor-pointer active:scale-90 transition-transform flex items-center justify-center gap-1">
-                                                        <Camera size={20} />
+                                                    <label className="absolute bottom-2 right-4 bg-yellow-400 text-black p-2 rounded-xl shadow-xl cursor-pointer active:scale-90 transition-transform flex items-center justify-center gap-1">
+                                                        <Camera size={16} />
                                                         <input 
                                                             type="file" 
                                                             accept="image/*" 
@@ -487,6 +553,11 @@
                                                             onChange={(e) => {
                                                                 const file = e.target.files[0];
                                                                 if(file) {
+                                                                    // Estrai la data del file (se disponibile) o usa la data odierna
+                                                                    const fDate = file.lastModified 
+                                                                        ? new Date(file.lastModified).toLocaleDateString() 
+                                                                        : new Date().toLocaleDateString();
+
                                                                     const reader = new FileReader();
                                                                     reader.onloadend = () => {
                                                                         const img = new Image();
@@ -499,7 +570,7 @@
                                                                             canvas.height = img.height * scaleSize;
                                                                             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                                                                             const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
-                                                                            updateCivicoPhoto(cNum, compressedDataUrl);
+                                                                            updateCivicoPhoto(cNum, compressedDataUrl, fDate);
                                                                         };
                                                                         img.src = reader.result;
                                                                     };
@@ -511,9 +582,9 @@
                                                     {civicoData.photo && (
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); if(window.confirm('Rimuovere foto?')) updateCivicoPhoto(cNum, null); }}
-                                                            className="absolute bottom-4 right-16 bg-red-500 text-white p-3 rounded-2xl shadow-xl active:scale-90 transition-transform"
+                                                            className="absolute bottom-2 right-14 bg-red-500 text-white p-2 rounded-xl shadow-xl active:scale-90 transition-transform"
                                                         >
-                                                            <Trash2 size={20} />
+                                                            <Trash2 size={16} />
                                                         </button>
                                                     )}
                                                 </div>
@@ -521,23 +592,28 @@
                                                 {/* Residenti */}
                                                 <div className="divide-y divide-slate-50">
                                                     {civicoData.residents.map(res => (
-                                                        <div key={res.id} className="p-4 flex justify-between items-center group active:bg-slate-50">
+                                                        <div key={res.id} className="py-2 px-4 flex justify-between items-center group active:bg-slate-50">
                                                             <div className="flex-1">
-                                                                <p className="font-black text-slate-800 uppercase leading-none tracking-tight mb-1">{res.name}</p>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded
+                                                                <p className="font-black text-slate-800 uppercase leading-tight tracking-tight mb-1">{res.name}</p>
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded
                                                                         ${res.status === 'residente' ? 'bg-green-100 text-green-700' : 
                                                                         res.status === 'sconosciuto' ? 'bg-red-100 text-red-700' : 
                                                                         res.status === 'trasferito' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'}`}>
                                                                         {res.status}
                                                                     </span>
-                                                                    <span className="text-[9px] text-slate-300 font-bold">{res.date}</span>
+                                                                    {res.posCassetta && (
+                                                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
+                                                                            Pos: {res.posCassetta}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-[8px] text-slate-300 font-bold">{res.date}</span>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex gap-2">
+                                                            <div className="flex gap-1">
                                                                 <button 
                                                                     onClick={() => {
-                                                                        setFormState({ name: res.name, status: res.status, civico: cNum });
+                                                                        setFormState({ name: res.name, status: res.status, civico: cNum, posCassetta: res.posCassetta || '' });
                                                                         setFormMode({ type: 'edit', data: res, civico: cNum });
                                                                         setView('form');
                                                                     }}
@@ -563,8 +639,8 @@
                                 </h2>
 
                                 <div className="space-y-6">
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="col-span-1">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico</label>
                                             <input 
                                                 type="number" 
@@ -573,16 +649,27 @@
                                                 onChange={(e) => setFormState({...formState, civico: e.target.value})}
                                             />
                                         </div>
-                                        <div className="col-span-2">
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome sul Campanello</label>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Pos. Cassetta</label>
                                             <input 
                                                 type="text" 
-                                                className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200"
-                                                placeholder="ROSSI MARIO"
-                                                value={formState.name}
-                                                onChange={(e) => setFormState({...formState, name: e.target.value})}
+                                                className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 text-center uppercase"
+                                                placeholder="ES: 2/1"
+                                                value={formState.posCassetta || ''}
+                                                onChange={(e) => setFormState({...formState, posCassetta: e.target.value})}
                                             />
                                         </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome sul Campanello</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200"
+                                            placeholder="ROSSI MARIO"
+                                            value={formState.name}
+                                            onChange={(e) => setFormState({...formState, name: e.target.value})}
+                                        />
                                     </div>
 
                                     <div>
