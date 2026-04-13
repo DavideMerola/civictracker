@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Postino Smart</title>
+
+    <!-- Inclusione di React e ReactDOM -->
+    <script
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+      crossorigin
+    ></script>
+
+    <!-- Inclusione di Babel per compilare JSX nel browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Inclusione di Tailwind CSS per lo styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Inclusione di Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        -webkit-tap-highlight-color: transparent; /* Rimuove il flash blu su mobile */
+        overscroll-behavior-y: none; /* Previene il pull-to-refresh fastidioso */
+      }
+      /* Definizioni base per Tailwind */
+      @tailwind base;
+      @tailwind components;
+      @tailwind utilities;
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900 overflow-x-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      // Estraiamo gli hook da React
+      const { useState, useEffect, useMemo } = React;
+
+      // Implementazione delle icone come semplici SVG per non dipendere dalla libreria React di Lucide
+      // che in versione standalone è complessa da usare
+      const Icon = ({ name, size = 24, className = "", strokeWidth = 2 }) => {
+        // Un trucco per usare Lucide in ambiente senza build:
+        // Dopo il render, diciamo a Lucide di "scansionare" e sostituire i tag <i>
+        useEffect(() => {
+          lucide.createIcons();
+        }, [name]);
+        return (
+          <i
+            data-lucide={name}
+            style={{ width: size, height: size }}
+            className={className}
+            stroke-width={strokeWidth}
+          ></i>
+        );
+      };
+
+      // Mappatura delle icone usate
+      const MapPin = (p) => <Icon name="map-pin" {...p} />;
+      const UserPlus = (p) => <Icon name="user-plus" {...p} />;
+      const Search = (p) => <Icon name="search" {...p} />;
+      const Home = (p) => <Icon name="home" {...p} />;
+      const Trash2 = (p) => <Icon name="trash-2" {...p} />;
+      const Camera = (p) => <Icon name="camera" {...p} />;
+      const ChevronRight = (p) => <Icon name="chevron-right" {...p} />;
+      const Plus = (p) => <Icon name="plus" {...p} />;
+      const Save = (p) => <Icon name="save" {...p} />;
+      const X = (p) => <Icon name="x" {...p} />;
+      const UserCheck = (p) => <Icon name="user-check" {...p} />;
+      const UserMinus = (p) => <Icon name="user-minus" {...p} />;
+      const UserX = (p) => <Icon name="user-x" {...p} />;
+      const HelpCircle = (p) => <Icon name="help-circle" {...p} />;
+      const ArrowLeft = (p) => <Icon name="arrow-left" {...p} />;
+      const Edit2 = (p) => <Icon name="edit-2" {...p} />;
+      const Filter = (p) => <Icon name="filter" {...p} />;
+      const Menu = (p) => <Icon name="menu" {...p} />;
+      const Layers = (p) => <Icon name="layers" {...p} />;
+      const ImageIcon = (p) => <Icon name="image" {...p} />;
+
+      const App = () => {
+        // --- Stato Persistente ---
+        const [data, setData] = useState(() => {
+          const saved = localStorage.getItem("postino_data_v4");
+          return saved
+            ? JSON.parse(saved)
+            : {
+                zones: { "ZONA A": { streets: {} }, "ZONA B": { streets: {} } },
+              };
+        });
+
+        // --- Stato UI ---
+        const [view, setView] = useState("list");
+        const [activeZone, setActiveZone] = useState("ZONA A");
+        const [activeStreet, setActiveStreet] = useState(null);
+        const [sidebarOpen, setSidebarOpen] = useState(false);
+        const [zoomedImage, setZoomedImage] = useState(null);
+
+        // Filtri
+        const [searchTerm, setSearchTerm] = useState("");
+        const [civicoFilter, setCivicoFilter] = useState("");
+        const [nameFilter, setNameFilter] = useState("");
+
+        // Form Nominativo
+        const [formMode, setFormMode] = useState(null);
+        const [formState, setFormState] = useState({
+          name: "",
+          status: "residente",
+          civico: "",
+        });
+
+        const [notification, setNotification] = useState(null);
+
+        // Migrazione Dati
+        useEffect(() => {
+          const vecchiDati = localStorage.getItem("postino_data_v3");
+          if (vecchiDati && !localStorage.getItem("postino_data_v4_migrated")) {
+            setData(JSON.parse(vecchiDati));
+            localStorage.setItem("postino_data_v4_migrated", "true");
+          }
+        }, []);
+
+        // Salvataggio automatico
+        useEffect(() => {
+          localStorage.setItem("postino_data_v4", JSON.stringify(data));
+        }, [data]);
+
+        const notify = (msg) => {
+          setNotification(msg);
+          setTimeout(() => setNotification(null), 3000);
+        };
+
+        // --- Logica Dati ---
+        const addZone = (name) => {
+          const zName = name.trim().toUpperCase();
+          if (!zName || data.zones[zName])
+            return notify("Zona già esistente o non valida");
+          setData((prev) => ({
+            ...prev,
+            zones: { ...prev.zones, [zName]: { streets: {} } },
+          }));
+          setActiveZone(zName);
+          setSidebarOpen(false);
+        };
+
+        const deleteZone = (zName) => {
+          if (
+            !window.confirm(
+              `Sei sicuro di voler eliminare la ${zName} e tutte le sue strade?`,
+            )
+          )
+            return;
+          setData((prev) => {
+            const newData = { ...prev };
+            delete newData.zones[zName];
+            const keys = Object.keys(newData.zones);
+            if (keys.length > 0) {
+              setActiveZone(keys[0]);
+            } else {
+              newData.zones = { "ZONA DEFAULT": { streets: {} } };
+              setActiveZone("ZONA DEFAULT");
+            }
+            return newData;
+          });
+          setSidebarOpen(false);
+          setView("list");
+        };
+
+        const addStreet = (streetName) => {
+          const sName = streetName.trim().toUpperCase();
+          if (!sName) return;
+          if (data.zones[activeZone].streets[sName])
+            return notify("Via già presente in questa zona");
+
+          setData((prev) => ({
+            ...prev,
+            zones: {
+              ...prev.zones,
+              [activeZone]: {
+                ...prev.zones[activeZone],
+                streets: {
+                  ...prev.zones[activeZone].streets,
+                  [sName]: { civici: {} },
+                },
+              },
+            },
+          }));
+          setView("list");
+        };
+
+        const handleSaveResident = () => {
+          const { name, status, civico } = formState;
+          if (!name || !civico) return notify("Compila Nome e Civico");
+
+          setData((prev) => {
+            const newData = { ...prev };
+            const street = newData.zones[activeZone].streets[activeStreet];
+
+            if (!street.civici[civico]) {
+              street.civici[civico] = { residents: [], photo: null };
+            }
+
+            if (formMode.type === "edit") {
+              const idx = street.civici[formMode.civico].residents.findIndex(
+                (r) => r.id === formMode.data.id,
+              );
+              if (formMode.civico !== civico) {
+                street.civici[formMode.civico].residents.splice(idx, 1);
+                if (!street.civici[civico])
+                  street.civici[civico] = { residents: [], photo: null };
+                street.civici[civico].residents.push({
+                  ...formMode.data,
+                  name: name.toUpperCase(),
+                  status,
+                });
+              } else {
+                street.civici[civico].residents[idx] = {
+                  ...formMode.data,
+                  name: name.toUpperCase(),
+                  status,
+                };
+              }
+            } else {
+              street.civici[civico].residents.push({
+                id: Date.now(),
+                name: name.toUpperCase(),
+                status,
+                date: new Date().toLocaleDateString(),
+              });
+            }
+            return newData;
+          });
+
+          setFormMode(null);
+          setView("street-detail");
+          notify("Salvato con successo");
+        };
+
+        const updateCivicoPhoto = (civico, photo) => {
+          setData((prev) => {
+            const newData = { ...prev };
+            newData.zones[activeZone].streets[activeStreet].civici[
+              civico
+            ].photo = photo;
+            return newData;
+          });
+        };
+
+        const deleteResident = (civico, id) => {
+          if (!window.confirm("Eliminare questo nominativo?")) return;
+          setData((prev) => {
+            const newData = { ...prev };
+            const civ =
+              newData.zones[activeZone].streets[activeStreet].civici[civico];
+            civ.residents = civ.residents.filter((r) => r.id !== id);
+            return newData;
+          });
+        };
+
+        // --- Logica Filtri ---
+        const filteredStreets = useMemo(() => {
+          const streets = data.zones[activeZone]?.streets || {};
+          return Object.keys(streets)
+            .filter((s) => s.toLowerCase().includes(searchTerm.toLowerCase()))
+            .sort();
+        }, [data, activeZone, searchTerm]);
+
+        const civiciToDisplay = useMemo(() => {
+          if (!activeStreet) return [];
+          const street = data.zones[activeZone].streets[activeStreet];
+          return Object.keys(street.civici)
+            .filter((cNum) => {
+              const matchesCivico =
+                civicoFilter === "" || cNum.includes(civicoFilter);
+              const residents = street.civici[cNum].residents;
+              const matchesName =
+                nameFilter === "" ||
+                residents.some((r) =>
+                  r.name.toLowerCase().includes(nameFilter.toLowerCase()),
+                );
+              return matchesCivico && matchesName;
+            })
+            .sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+        }, [data, activeZone, activeStreet, civicoFilter, nameFilter]);
+
+        // --- Componenti UI ---
+        const StatusButton = ({ status, current, onClick }) => {
+          const config = {
+            residente: { color: "bg-green-600", label: "Residente" },
+            sconosciuto: { color: "bg-red-600", label: "Sconosciuto" },
+            trasferito: { color: "bg-orange-500", label: "Trasferito" },
+            irreperibile: { color: "bg-purple-600", label: "Irreperibile" },
+            deceduto: { color: "bg-slate-700", label: "Deceduto" },
+          };
+          const active = current === status;
+          return (
+            <button
+              onClick={() => onClick(status)}
+              className={`p-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm border-2
+                            ${active ? `${config[status].color} border-white text-white scale-105` : "bg-white border-slate-100 text-slate-400"}`}
+            >
+              {config[status].label}
+            </button>
+          );
+        };
+
+        return (
+          <div className="min-h-screen pb-24">
+            {/* --- MODAL IMMAGINE INGRANDITA --- */}
+            {zoomedImage && (
+              <div
+                className="fixed inset-0 bg-black/95 z-[200] flex items-center justify-center p-4 backdrop-blur-sm"
+                onClick={() => setZoomedImage(null)}
+              >
+                <div className="relative max-w-full max-h-full flex flex-col items-center">
+                  <button
+                    className="absolute -top-14 right-0 text-white bg-white/20 hover:bg-white/40 p-3 rounded-full transition-colors"
+                    onClick={() => setZoomedImage(null)}
+                  >
+                    <X size={24} />
+                  </button>
+                  <img
+                    src={zoomedImage}
+                    alt="Zoomed"
+                    className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Sidebar Overlay */}
+            {sidebarOpen && (
+              <div
+                className="fixed inset-0 bg-black/50 z-[100] transition-opacity"
+                onClick={() => setSidebarOpen(false)}
+              />
+            )}
+
+            {/* Sidebar Menu */}
+            <div
+              className={`fixed top-0 left-0 h-full w-72 bg-slate-900 text-white z-[101] transform transition-transform shadow-2xl flex flex-col ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+            >
+              <div className="p-6 flex-1 overflow-y-auto">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-xl font-black italic flex items-center gap-2">
+                    <Layers className="text-yellow-400" /> ZONE
+                  </h2>
+                  <button
+                    onClick={() => setSidebarOpen(false)}
+                    className="p-2 text-white"
+                  >
+                    <X />
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {Object.keys(data.zones)
+                    .sort()
+                    .map((z) => (
+                      <div key={z} className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setActiveZone(z);
+                            setView("list");
+                            setSidebarOpen(false);
+                          }}
+                          className={`flex-1 text-left p-4 rounded-xl font-bold flex justify-between items-center transition-colors
+                                                ${activeZone === z ? "bg-yellow-400 text-black" : "bg-white/5 hover:bg-white/10 text-slate-300"}`}
+                        >
+                          {z}
+                          <ChevronRight size={16} />
+                        </button>
+                        <button
+                          onClick={() => deleteZone(z)}
+                          className="p-4 text-slate-500 hover:text-red-400 rounded-xl bg-white/5"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+
+                <button
+                  onClick={() => {
+                    const name = prompt("Nome Nuova Zona (es. ZONA C o 15):");
+                    if (name) addZone(name);
+                  }}
+                  className="w-full mt-8 p-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 font-bold hover:text-white transition-colors"
+                >
+                  + AGGIUNGI ZONA
+                </button>
+              </div>
+            </div>
+
+            {/* Header Principale */}
+            <header className="bg-slate-900 text-white p-4 sticky top-0 z-50 shadow-md">
+              <div className="flex justify-between items-center max-w-2xl mx-auto">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSidebarOpen(true)}
+                    className="p-1 hover:bg-white/10 rounded-lg text-white"
+                  >
+                    <Menu />
+                  </button>
+                  {view !== "list" ? (
+                    <button
+                      onClick={() => {
+                        setView("list");
+                        setCivicoFilter("");
+                        setNameFilter("");
+                      }}
+                      className="p-1 text-white"
+                    >
+                      <ArrowLeft />
+                    </button>
+                  ) : (
+                    <div>
+                      <h1 className="text-sm font-black text-yellow-400 uppercase leading-none tracking-tighter">
+                        POSTMAN APP
+                      </h1>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">
+                        {activeZone}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{" "}
+                  v4
+                </div>
+              </div>
+            </header>
+
+            <main className="max-w-2xl mx-auto p-4">
+              {notification && (
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black shadow-2xl z-[150] text-sm animate-bounce whitespace-nowrap">
+                  {notification}
+                </div>
+              )}
+
+              {/* --- VIEW: LISTA STRADE --- */}
+              {view === "list" && (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <Search size={20} />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="CERCA STRADA..."
+                      className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 outline-none font-bold uppercase"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid gap-3">
+                    {filteredStreets.map((street) => (
+                      <button
+                        key={street}
+                        onClick={() => {
+                          setActiveStreet(street);
+                          setView("street-detail");
+                        }}
+                        className="bg-white p-5 rounded-2xl flex justify-between items-center shadow-sm active:scale-[0.98] transition-all border border-transparent hover:border-yellow-400"
+                      >
+                        <div className="text-left">
+                          <p className="font-black text-xl italic text-slate-800">
+                            {street}
+                          </p>
+                          <p className="text-slate-400 text-[10px] font-black uppercase">
+                            {
+                              Object.keys(
+                                data.zones[activeZone].streets[street].civici,
+                              ).length
+                            }{" "}
+                            Punti Mappati
+                          </p>
+                        </div>
+                        <div className="text-slate-300">
+                          <ChevronRight />
+                        </div>
+                      </button>
+                    ))}
+                    {filteredStreets.length === 0 && (
+                      <div className="text-center py-20 opacity-30">
+                        <div className="flex justify-center mb-2">
+                          <MapPin size={48} />
+                        </div>
+                        <p className="font-black uppercase text-xs">
+                          Nessuna via in questa zona
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* --- VIEW: DETTAGLIO VIA --- */}
+              {view === "street-detail" && activeStreet && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="flex justify-between items-end">
+                    <h2 className="text-3xl font-black italic uppercase leading-tight flex-1">
+                      {activeStreet}
+                    </h2>
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Eliminare questa via e tutti i suoi civici?",
+                          )
+                        ) {
+                          setData((prev) => {
+                            const nd = { ...prev };
+                            delete nd.zones[activeZone].streets[activeStreet];
+                            return nd;
+                          });
+                          setView("list");
+                        }
+                      }}
+                      className="text-slate-300 p-2"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  </div>
+
+                  {/* Filtri Doppi */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <Filter size={14} />
+                      </div>
+                      <input
+                        type="number"
+                        placeholder="CIVICO..."
+                        className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm"
+                        value={civicoFilter}
+                        onChange={(e) => setCivicoFilter(e.target.value)}
+                      />
+                    </div>
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <Search size={14} />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="NOME..."
+                        className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase"
+                        value={nameFilter}
+                        onChange={(e) => setNameFilter(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setFormState({
+                        name: "",
+                        status: "residente",
+                        civico: civicoFilter,
+                      });
+                      setFormMode({ type: "add" });
+                      setView("form");
+                    }}
+                    className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  >
+                    <UserPlus size={20} /> NUOVO NOMINATIVO
+                  </button>
+
+                  <div className="space-y-6 mt-4">
+                    {civiciToDisplay.map((cNum) => {
+                      const civicoData =
+                        data.zones[activeZone].streets[activeStreet].civici[
+                          cNum
+                        ];
+                      return (
+                        <div
+                          key={cNum}
+                          className="bg-white rounded-[2rem] overflow-hidden shadow-md border border-slate-100"
+                        >
+                          {/* Header Civico con Immagine */}
+                          <div className="h-40 relative bg-slate-200">
+                            {civicoData.photo ? (
+                              <img
+                                src={civicoData.photo}
+                                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                alt="civico"
+                                onClick={() => setZoomedImage(civicoData.photo)}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
+                                <ImageIcon size={32} />
+                                <span className="text-[10px] font-black uppercase mt-1">
+                                  Carica Foto Citofono
+                                </span>
+                              </div>
+                            )}
+                            <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur px-4 py-1 rounded-full text-white font-black italic pointer-events-none">
+                              CIVICO {cNum}
+                            </div>
+
+                            {/* Bottone per Caricare/Scattare Foto. */}
+                            <label className="absolute bottom-4 right-4 bg-yellow-400 text-black p-3 rounded-2xl shadow-xl cursor-pointer active:scale-90 transition-transform flex items-center justify-center gap-1">
+                              <Camera size={20} />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      const img = new Image();
+                                      img.onload = () => {
+                                        const canvas =
+                                          document.createElement("canvas");
+                                        const ctx = canvas.getContext("2d");
+                                        const MAX_WIDTH = 800;
+                                        const scaleSize = MAX_WIDTH / img.width;
+                                        canvas.width = MAX_WIDTH;
+                                        canvas.height = img.height * scaleSize;
+                                        ctx.drawImage(
+                                          img,
+                                          0,
+                                          0,
+                                          canvas.width,
+                                          canvas.height,
+                                        );
+                                        const compressedDataUrl =
+                                          canvas.toDataURL("image/jpeg", 0.6);
+                                        updateCivicoPhoto(
+                                          cNum,
+                                          compressedDataUrl,
+                                        );
+                                      };
+                                      img.src = reader.result;
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                            {civicoData.photo && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm("Rimuovere foto?"))
+                                    updateCivicoPhoto(cNum, null);
+                                }}
+                                className="absolute bottom-4 right-16 bg-red-500 text-white p-3 rounded-2xl shadow-xl active:scale-90 transition-transform"
+                              >
+                                <Trash2 size={20} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Residenti */}
+                          <div className="divide-y divide-slate-50">
+                            {civicoData.residents.map((res) => (
+                              <div
+                                key={res.id}
+                                className="p-4 flex justify-between items-center group active:bg-slate-50"
+                              >
+                                <div className="flex-1">
+                                  <p className="font-black text-slate-800 uppercase leading-none tracking-tight mb-1">
+                                    {res.name}
+                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`text-[10px] font-black uppercase px-2 py-0.5 rounded
+                                                                        ${
+                                                                          res.status ===
+                                                                          "residente"
+                                                                            ? "bg-green-100 text-green-700"
+                                                                            : res.status ===
+                                                                                "sconosciuto"
+                                                                              ? "bg-red-100 text-red-700"
+                                                                              : res.status ===
+                                                                                  "trasferito"
+                                                                                ? "bg-orange-100 text-orange-700"
+                                                                                : "bg-slate-100 text-slate-600"
+                                                                        }`}
+                                    >
+                                      {res.status}
+                                    </span>
+                                    <span className="text-[9px] text-slate-300 font-bold">
+                                      {res.date}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setFormState({
+                                        name: res.name,
+                                        status: res.status,
+                                        civico: cNum,
+                                      });
+                                      setFormMode({
+                                        type: "edit",
+                                        data: res,
+                                        civico: cNum,
+                                      });
+                                      setView("form");
+                                    }}
+                                    className="p-2 text-slate-300 hover:text-slate-900"
+                                  >
+                                    <Edit2 size={18} />
+                                  </button>
+                                  <button
+                                    onClick={() => deleteResident(cNum, res.id)}
+                                    className="p-2 text-slate-200 hover:text-red-500"
+                                  >
+                                    <X size={18} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* --- VIEW: FORM AGGIUNGI/MODIFICA --- */}
+              {view === "form" && (
+                <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-10 duration-300">
+                  <h2 className="text-2xl font-black italic uppercase text-slate-900 mb-6">
+                    {formMode?.type === "edit"
+                      ? "Modifica Scheda"
+                      : "Nuovo Ingresso"}
+                  </h2>
+
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-1">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">
+                          Civico
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200"
+                          value={formState.civico}
+                          onChange={(e) =>
+                            setFormState({
+                              ...formState,
+                              civico: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">
+                          Nome sul Campanello
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200"
+                          placeholder="ROSSI MARIO"
+                          value={formState.name}
+                          onChange={(e) =>
+                            setFormState({ ...formState, name: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 text-center">
+                        Stato della Consegna
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          "residente",
+                          "sconosciuto",
+                          "trasferito",
+                          "irreperibile",
+                          "deceduto",
+                        ].map((st) => (
+                          <StatusButton
+                            key={st}
+                            status={st}
+                            current={formState.status}
+                            onClick={(s) =>
+                              setFormState({ ...formState, status: s })
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 pt-6">
+                      <button
+                        onClick={() => setView("street-detail")}
+                        className="flex-1 py-4 font-black text-slate-400 text-xs uppercase"
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        onClick={handleSaveResident}
+                        className="flex-[2] py-4 bg-yellow-400 text-black rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform"
+                      >
+                        Conferma Dati
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* --- VIEW: AGGIUNGI VIA --- */}
+              {view === "add-street" && (
+                <div className="bg-white p-8 rounded-[3rem] shadow-2xl space-y-6 border border-slate-100">
+                  <div>
+                    <h2 className="text-3xl font-black italic uppercase leading-none mb-2">
+                      Aggiungi Via
+                    </h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Giro in: {activeZone}
+                    </p>
+                  </div>
+                  <input
+                    id="new-street-input"
+                    type="text"
+                    className="w-full p-5 bg-slate-50 rounded-3xl border-none ring-2 ring-slate-100 text-2xl uppercase font-black italic text-slate-900 focus:ring-yellow-400 outline-none"
+                    placeholder="ES: VIA BOLOGNA"
+                    autoFocus
+                  />
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => setView("list")}
+                      className="flex-1 py-4 font-black text-slate-400 text-xs uppercase"
+                    >
+                      Chiudi
+                    </button>
+                    <button
+                      onClick={() =>
+                        addStreet(
+                          document.getElementById("new-street-input").value,
+                        )
+                      }
+                      className="flex-[2] py-4 bg-slate-900 text-white rounded-3xl font-black shadow-xl uppercase"
+                    >
+                      Mappa Strada
+                    </button>
+                  </div>
+                </div>
+              )}
+            </main>
+
+            {/* Navigazione Bottom */}
+            {view === "list" && (
+              <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-4 pb-10 flex justify-around items-center z-[80] shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+                <button
+                  onClick={() => setView("list")}
+                  className="flex flex-col items-center gap-1 text-slate-900"
+                >
+                  <div className="text-slate-900">
+                    <Home size={22} />
+                  </div>
+                  <span className="text-[9px] font-black uppercase italic">
+                    Dashboard
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setView("add-street")}
+                  className="bg-yellow-400 text-black p-4 rounded-3xl -mt-16 shadow-2xl border-4 border-slate-50 active:scale-90 transition-transform flex items-center justify-center"
+                >
+                  <div className="text-black">
+                    <Plus size={32} strokeWidth={3} />
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const dataStr =
+                      "data:text/json;charset=utf-8," +
+                      encodeURIComponent(JSON.stringify(data));
+                    const downloadAnchorNode = document.createElement("a");
+                    downloadAnchorNode.setAttribute("href", dataStr);
+                    downloadAnchorNode.setAttribute(
+                      "download",
+                      `Postino_Backup_${activeZone}.json`,
+                    );
+                    document.body.appendChild(downloadAnchorNode);
+                    downloadAnchorNode.click();
+                    downloadAnchorNode.remove();
+                    notify("Backup salvato");
+                  }}
+                  className="flex flex-col items-center gap-1 text-slate-400"
+                >
+                  <div className="text-slate-400">
+                    <Save size={22} />
+                  </div>
+                  <span className="text-[9px] font-black uppercase italic">
+                    Backup
+                  </span>
+                </button>
+              </nav>
+            )}
+          </div>
+        );
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
