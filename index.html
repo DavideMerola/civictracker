@@ -188,6 +188,7 @@
             // Stato Scanner OCR
             const [isScanning, setIsScanning] = useState(false);
             const [scanProgress, setScanProgress] = useState(0);
+            const [ocrData, setOcrData] = useState(null); // Contiene i tag estratti e i dati temporanei
 
             useEffect(() => {
                 const vecchiDati = localStorage.getItem('postino_data_v3');
@@ -303,7 +304,7 @@
                 });
             };
 
-            // LOGICA SCANNER OCR
+            // LOGICA SCANNER OCR A TAG
             const handleScanLetter = async (e) => {
                 const file = e.target.files[0];
                 if(!file) return;
@@ -312,53 +313,33 @@
                 setScanProgress(0);
 
                 try {
-                    // Eseguiamo il riconoscimento ottico con Tesseract.js
                     const result = await Tesseract.recognize(file, 'ita', {
                         logger: m => {
                             if (m.status === 'recognizing text') setScanProgress(Math.round(m.progress * 100));
                         }
                     });
                     
-                    const text = result.data.text;
-                    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+                    // Ottieni il testo e splitta ogni blocco separato da spazio/a capo in un array
+                    const wordsArray = result.data.text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.trim().length > 0);
                     
-                    let extractedName = '';
-                    let extractedCivico = '';
-
-                    // 1. Estrazione Nome: Prendiamo la prima linea pulita che non sia roba postale
-                    const cleanLines = lines.filter(l => {
-                        const up = l.toUpperCase();
-                        return !up.includes("POSTE ITALIANE") && !up.includes("PRIORITY") && !up.includes("SPEDIZIONE") && !up.includes("TARIFFE");
+                    // Parole da scartare in automatico (rumore postale)
+                    const excludeList = ['POSTE', 'ITALIANE', 'SPA', 'S.P.A.', 'PRIORITY', 'SPEDIZIONE', 'TARIFFE', 'CPA', 'CMP', 'FRANCO', 'A', 'IL', 'AL'];
+                    
+                    const cleanTags = wordsArray.filter(w => {
+                        const cleanWord = w.toUpperCase().replace(/[^A-Z]/g, '');
+                        // Mantiene parole non escluse e lunghe > 1, OPPURE stringhe che contengono numeri (i civici)
+                        return (!excludeList.includes(cleanWord) && w.length > 1) || /\d/.test(w);
                     });
-                    
-                    if (cleanLines.length > 0) {
-                        extractedName = cleanLines[0].replace(/[^a-zA-Z\s]/g, '').trim().toUpperCase();
-                    }
 
-                    // 2. Estrazione Civico: Cerchiamo la riga che contiene il nome della via attuale
-                    if (activeStreet) {
-                        const streetWords = activeStreet.split(' ').filter(w => w.length > 2);
-                        const streetLine = lines.find(l => streetWords.some(w => l.toUpperCase().includes(w)));
-                        
-                        if (streetLine) {
-                            const match = streetLine.match(/\b\d{1,4}[a-zA-Z]?\b/);
-                            if (match) extractedCivico = match[0].toUpperCase();
-                        }
-                    }
-
-                    // 2b. Fallback Civico: Se non ha trovato la riga della via, cerca un numero generico
-                    if (!extractedCivico) {
-                        const fallbackMatch = text.match(/\b\d{1,4}[a-zA-Z]?\b/);
-                        if (fallbackMatch && !/\b\d{5}\b/.test(fallbackMatch[0])) { // Evita il CAP (5 cifre)
-                            extractedCivico = fallbackMatch[0].toUpperCase();
-                        }
-                    }
-
-                    // Apriamo il form con i dati precompilati
-                    setFormState({ name: extractedName, status: 'residente', civico: extractedCivico, posCassetta: '' });
-                    setFormMode({ type: 'add' });
-                    setView('form');
-                    notify("Dati estratti! Controlla e conferma.");
+                    // Prepara la view di selezione Tag
+                    setOcrData({ 
+                        tags: cleanTags, 
+                        activeField: 'name', // Quale campo riceve i click inizialmente
+                        name: '', 
+                        civico: '' 
+                    });
+                    setView('ocr-select');
+                    notify("Tocca i tag per comporre la scheda.");
 
                 } catch (error) {
                     console.error("Errore OCR:", error);
@@ -442,8 +423,8 @@
                             </div>
                             <h3 className="text-white text-xl font-black uppercase mb-2">Analisi Lettera...</h3>
                             <p className="text-slate-400 text-sm font-bold text-center mb-6">
-                                Sto leggendo l'indirizzo e il nome.<br/>
-                                <span className="text-[10px]">Il primo avvio richiede qualche secondo extra per il dizionario.</span>
+                                Sto leggendo la foto per estrarre i dati.<br/>
+                                <span className="text-[10px]">Il primo avvio richiede qualche secondo in più.</span>
                             </p>
                             <div className="w-full max-w-xs bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700">
                                 <div className="bg-blue-500 h-full transition-all duration-300" style={{width: `${scanProgress}%`}}></div>
@@ -532,7 +513,14 @@
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setSidebarOpen(true)} className="p-1 hover:bg-white/10 rounded-lg text-white"><Menu /></button>
                                 {view !== 'list' && view !== 'report' ? (
-                                    <button onClick={() => { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); }} className="p-1 text-white"><ArrowLeft /></button>
+                                    <button onClick={() => { 
+                                        if (view === 'form' || view === 'ocr-select') {
+                                            setView('street-detail');
+                                            setOcrData(null);
+                                        } else {
+                                            setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); 
+                                        }
+                                    }} className="p-1 text-white"><ArrowLeft /></button>
                                 ) : (
                                     <div>
                                         <h1 className="text-sm font-black text-yellow-400 uppercase leading-none tracking-tighter">POSTMAN APP</h1>
@@ -541,7 +529,7 @@
                                 )}
                             </div>
                             <div className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> v5.0 OCR
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> v5.1 OCR Tag
                             </div>
                         </div>
                     </header>
@@ -550,6 +538,86 @@
                         {notification && (
                             <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black shadow-2xl z-[150] text-sm animate-bounce whitespace-nowrap">
                                 {notification}
+                            </div>
+                        )}
+
+                        {/* --- VIEW: SELEZIONE TAG OCR --- */}
+                        {view === 'ocr-select' && ocrData && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <div>
+                                    <h2 className="text-3xl font-black italic uppercase leading-tight text-slate-800">Scansione OK</h2>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tocca le parole scansionate per riempire i campi</p>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {/* Casella NOME */}
+                                    <div 
+                                        onClick={() => setOcrData({...ocrData, activeField: 'name'})}
+                                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${ocrData.activeField === 'name' ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/20' : 'border-slate-200 bg-white'}`}
+                                    >
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'name' ? 'text-blue-600' : 'text-slate-400'}`}>1. Componi Nome</span>
+                                            {ocrData.name && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, name: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}
+                                        </div>
+                                        <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">
+                                            {ocrData.name || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}
+                                        </div>
+                                    </div>
+
+                                    {/* Casella CIVICO */}
+                                    <div 
+                                        onClick={() => setOcrData({...ocrData, activeField: 'civico'})}
+                                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${ocrData.activeField === 'civico' ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/20' : 'border-slate-200 bg-white'}`}
+                                    >
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'civico' ? 'text-blue-600' : 'text-slate-400'}`}>2. Seleziona Civico</span>
+                                            {ocrData.civico && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, civico: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}
+                                        </div>
+                                        <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">
+                                            {ocrData.civico || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Bag di Tags */}
+                                <div className="bg-white p-5 rounded-[2rem] shadow-inner border border-slate-200">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-4 text-center tracking-widest"><Scan size={14} className="inline mr-1" /> Dati Letti dalla Lettera</p>
+                                    <div className="flex flex-wrap gap-2 justify-center">
+                                        {ocrData.tags.map((tag, i) => (
+                                            <button 
+                                                key={i}
+                                                onClick={() => {
+                                                    setOcrData(prev => {
+                                                        if (prev.activeField === 'name') {
+                                                            return { ...prev, name: prev.name ? prev.name + ' ' + tag : tag };
+                                                        } else {
+                                                            return { ...prev, civico: prev.civico ? prev.civico + ' ' + tag : tag };
+                                                        }
+                                                    });
+                                                }}
+                                                className="bg-slate-100 border border-slate-200 hover:bg-yellow-100 hover:border-yellow-300 text-slate-800 font-black px-4 py-3 rounded-2xl text-sm transition-colors uppercase active:scale-95 shadow-sm"
+                                            >
+                                                {tag}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {ocrData.tags.length === 0 && <p className="text-center text-slate-400 text-sm italic">Nessun testo leggibile trovato.</p>}
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button onClick={() => { setView('street-detail'); setOcrData(null); }} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
+                                    <button 
+                                        onClick={() => {
+                                            setFormState({ name: ocrData.name.toUpperCase(), status: 'residente', civico: ocrData.civico.toUpperCase(), posCassetta: '' });
+                                            setFormMode({ type: 'add' });
+                                            setView('form');
+                                            setOcrData(null);
+                                        }} 
+                                        className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform"
+                                    >
+                                        Vai al Form
+                                    </button>
+                                </div>
                             </div>
                         )}
 
