@@ -322,9 +322,17 @@
                     // Ottieni il testo e splitta ogni blocco separato da spazio/a capo in un array
                     const wordsArray = result.data.text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.trim().length > 0);
                     
-                    // Teniamo praticamente tutto, rimuoviamo solo i caratteri speciali all'inizio/fine e la punteggiatura isolata
+                    // FILTRO ANTI-RUMORE: Rimuove la punteggiatura e filtra le sillabe fantasma
                     const cleanTags = wordsArray.map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toUpperCase())
-                                                .filter(w => w.length > 1 || /\d/.test(w)); // Tiene parole lunghe > 1 o numeri singoli
+                        .filter(w => {
+                            if (/\d/.test(w)) return true; // Tieni sempre i numeri (civici, cap, ecc)
+                            if (w.length <= 2) {
+                                // Tieni solo le particelle comuni nei cognomi italiani, scarta sillabe a caso (fi, sl, he)
+                                const validTwoLetter = ['DE', 'DI', 'DA', 'LA', 'LO', 'LI', 'DEL', 'DAL'];
+                                return validTwoLetter.includes(w);
+                            }
+                            return w.length > 2; // Tieni le parole vere (3+ lettere)
+                        });
 
                     // Prepara la view di selezione Tag
                     setOcrData({ 
@@ -733,7 +741,6 @@
                                         <input 
                                             type="file" 
                                             accept="image/*" 
-                                            capture="environment" 
                                             className="hidden" 
                                             onChange={handleScanLetter} 
                                         />
