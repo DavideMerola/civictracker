@@ -304,7 +304,7 @@
                 });
             };
 
-            // LOGICA SCANNER OCR A TAG
+            // LOGICA SCANNER OCR A TAG (Aggiornata senza filtri)
             const handleScanLetter = async (e) => {
                 const file = e.target.files[0];
                 if(!file) return;
@@ -322,14 +322,9 @@
                     // Ottieni il testo e splitta ogni blocco separato da spazio/a capo in un array
                     const wordsArray = result.data.text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.trim().length > 0);
                     
-                    // Parole da scartare in automatico (rumore postale)
-                    const excludeList = ['POSTE', 'ITALIANE', 'SPA', 'S.P.A.', 'PRIORITY', 'SPEDIZIONE', 'TARIFFE', 'CPA', 'CMP', 'FRANCO', 'A', 'IL', 'AL'];
-                    
-                    const cleanTags = wordsArray.filter(w => {
-                        const cleanWord = w.toUpperCase().replace(/[^A-Z]/g, '');
-                        // Mantiene parole non escluse e lunghe > 1, OPPURE stringhe che contengono numeri (i civici)
-                        return (!excludeList.includes(cleanWord) && w.length > 1) || /\d/.test(w);
-                    });
+                    // Teniamo praticamente tutto, rimuoviamo solo i caratteri speciali all'inizio/fine e la punteggiatura isolata
+                    const cleanTags = wordsArray.map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toUpperCase())
+                                                .filter(w => w.length > 1 || /\d/.test(w)); // Tiene parole lunghe > 1 o numeri singoli
 
                     // Prepara la view di selezione Tag
                     setOcrData({ 
@@ -421,10 +416,10 @@
                             <div className="relative w-24 h-24 flex items-center justify-center scanner-ring mb-8">
                                 <Scan size={40} className="text-blue-500" />
                             </div>
-                            <h3 className="text-white text-xl font-black uppercase mb-2">Analisi Lettera...</h3>
+                            <h3 className="text-white text-xl font-black uppercase mb-2">Lettura in corso...</h3>
                             <p className="text-slate-400 text-sm font-bold text-center mb-6">
-                                Sto leggendo la foto per estrarre i dati.<br/>
-                                <span className="text-[10px]">Il primo avvio richiede qualche secondo in più.</span>
+                                Sto estraendo le parole dalla foto.<br/>
+                                <span className="text-[10px] italic">Consiglio: le etichette stampate vengono lette molto meglio della grafia a penna.</span>
                             </p>
                             <div className="w-full max-w-xs bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700">
                                 <div className="bg-blue-500 h-full transition-all duration-300" style={{width: `${scanProgress}%`}}></div>
@@ -529,14 +524,14 @@
                                 )}
                             </div>
                             <div className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> v5.1 OCR Tag
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> v5.2 OCR Tag
                             </div>
                         </div>
                     </header>
 
                     <main className="max-w-2xl mx-auto p-4">
                         {notification && (
-                            <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black shadow-2xl z-[150] text-sm animate-bounce whitespace-nowrap">
+                            <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black shadow-2xl z-[150] text-sm animate-bounce whitespace-nowrap z-[400]">
                                 {notification}
                             </div>
                         )}
