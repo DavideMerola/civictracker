@@ -16,10 +16,10 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     
-    <!-- Inclusione di Babel per compilare JSX nel browser -->
+    <!-- Inclusione di Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Inclusione di Tailwind CSS per lo styling -->
+    <!-- Inclusione di Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Inclusione di Lucide Icons -->
@@ -38,35 +38,21 @@
         @tailwind components;
         @tailwind utilities;
         
-        .hide-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
         /* Animazioni personalizzate */
         @keyframes pulse-ring {
             0% { transform: scale(0.8); opacity: 0.5; }
             100% { transform: scale(1.3); opacity: 0; }
         }
-        .scanner-ring::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; right: 0; bottom: 0;
+        .scanner-ring::before, .mic-ring::before {
+            content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0;
             border-radius: 50%;
-            border: 4px solid #3b82f6;
             animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
         }
-        .mic-ring::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; right: 0; bottom: 0;
-            border-radius: 50%;
-            border: 4px solid #ef4444;
-            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-        }
+        .scanner-ring::before { border: 4px solid #3b82f6; }
+        .mic-ring::before { border: 4px solid #ef4444; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 overflow-x-hidden">
@@ -77,12 +63,11 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         const Icon = ({ name, size = 24, className = "", strokeWidth = 2 }) => {
-            useEffect(() => {
-                lucide.createIcons();
-            }, [name]);
+            useEffect(() => { lucide.createIcons(); }, [name]);
             return <i data-lucide={name} style={{ width: size, height: size }} className={className} stroke-width={strokeWidth}></i>;
         };
 
+        // Icone base
         const MapPin = (p) => <Icon name="map-pin" {...p} />;
         const UserPlus = (p) => <Icon name="user-plus" {...p} />;
         const Search = (p) => <Icon name="search" {...p} />;
@@ -108,7 +93,10 @@
         const Mic = (p) => <Icon name="mic" {...p} />;
         const WifiOff = (p) => <Icon name="wifi-off" {...p} />;
         const Zap = (p) => <Icon name="zap" {...p} />;
+        const Mailbox = (p) => <Icon name="mail" {...p} />;
+        const CheckCircle = (p) => <Icon name="check-circle" {...p} />;
 
+        // Componente Visualizzatore Immagini (Zoom)
         const ImageViewer = ({ imageObj, onClose }) => {
             const [scale, setScale] = useState(1);
             const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -121,49 +109,29 @@
                 startPos.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
                 e.target.setPointerCapture(e.pointerId);
             };
-            
             const handlePointerMove = (e) => {
                 if (!isDragging.current) return;
                 setPos({ x: e.clientX - startPos.current.x, y: e.clientY - startPos.current.y });
             };
-            
             const handlePointerUp = (e) => {
                 isDragging.current = false;
-                if (e.target.hasPointerCapture(e.pointerId)) {
-                    e.target.releasePointerCapture(e.pointerId);
-                }
+                if (e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId);
             };
 
             return (
                 <div className="fixed inset-0 bg-black/95 z-[200] flex items-center justify-center overflow-hidden touch-none" onClick={onClose}>
                     <div className="absolute top-6 left-4 right-4 flex justify-between items-center z-50" onClick={e => e.stopPropagation()}>
-                        <div className="bg-black/60 text-white px-4 py-2 rounded-xl text-xs font-bold backdrop-blur border border-white/20 flex items-center gap-2">
-                            <Calendar size={14} /> 
-                            {imageObj.date ? imageObj.date : 'Data non disponibile'}
+                        <div className="bg-black/60 text-white px-4 py-2 rounded-xl text-xs font-bold backdrop-blur border border-white/20 flex flex-col">
+                            <span className="text-yellow-400">{imageObj.type === 'citofono' ? 'CITOFONO' : 'CASSETTE'}</span>
+                            <span className="flex items-center gap-1"><Calendar size={12}/> {imageObj.date || 'Data N.D.'}</span>
                         </div>
-                        <button onClick={onClose} className="bg-black/60 hover:bg-white/30 text-white p-3 rounded-full backdrop-blur border border-white/20 shadow-xl">
-                            <X size={20} />
-                        </button>
+                        <button onClick={onClose} className="bg-black/60 hover:bg-white/30 text-white p-3 rounded-full backdrop-blur border border-white/20 shadow-xl"><X size={20} /></button>
                     </div>
-                    
                     <div className="w-full h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                        <img 
-                            src={imageObj.photo} 
-                            alt="Zoomed" 
-                            className="max-w-full max-h-[80vh] object-contain"
-                            style={{ 
-                                transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
-                                transition: isDragging.current ? 'none' : 'transform 0.1s ease-out',
-                                cursor: scale > 1 ? 'grab' : 'default'
-                            }}
-                            onPointerDown={handlePointerDown}
-                            onPointerMove={handlePointerMove}
-                            onPointerUp={handlePointerUp}
-                            onPointerCancel={handlePointerUp}
-                            draggable="false"
-                        />
+                        <img src={imageObj.photo} alt="Zoomed" className="max-w-full max-h-[80vh] object-contain"
+                            style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`, transition: isDragging.current ? 'none' : 'transform 0.1s ease-out', cursor: scale > 1 ? 'grab' : 'default' }}
+                            onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} draggable="false" />
                     </div>
-
                     <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-6 bg-black/60 p-2 rounded-full backdrop-blur z-50 border border-white/20 shadow-2xl" onClick={e => e.stopPropagation()}>
                         <button onClick={() => { setScale(prev => Math.max(1, prev - 0.5)); if(scale <= 1.5) setPos({x:0, y:0}); }} className="p-3 text-white active:scale-90 transition-transform"><ZoomOut size={24} /></button>
                         <div className="flex items-center justify-center w-12 text-yellow-400 font-black text-lg">{scale}x</div>
@@ -174,25 +142,52 @@
         };
 
         const App = () => {
+            // Inizializzazione Dati con Migrazione automatica (Da V4 a V5 per le doppie foto)
             const [data, setData] = useState(() => {
-                const saved = localStorage.getItem('postino_data_v4');
-                return saved ? JSON.parse(saved) : { zones: { "ZONA A": { streets: {} }, "ZONA B": { streets: {} } } };
+                const v5 = localStorage.getItem('postino_data_v5');
+                if (v5) return JSON.parse(v5);
+
+                const v4 = localStorage.getItem('postino_data_v4');
+                let parsed = v4 ? JSON.parse(v4) : { zones: { "ZONA DEFAULT": { streets: {} } } };
+                
+                // Miga i vecchi dati (singola foto) al nuovo sistema (Citofono + Cassette)
+                Object.values(parsed.zones).forEach(z => {
+                    if(!z.streets) z.streets = {};
+                    Object.values(z.streets).forEach(s => {
+                        if(!s.civici) s.civici = {};
+                        Object.values(s.civici).forEach(c => {
+                            if (c.photo) {
+                                c.photoCitofono = c.photo;
+                                c.dateCitofono = c.photoDate;
+                                delete c.photo;
+                                delete c.photoDate;
+                            }
+                        });
+                    });
+                });
+                return parsed;
             });
 
+            // Stati UI
             const [view, setView] = useState('list'); 
-            const [activeZone, setActiveZone] = useState("ZONA A");
+            const [activeZone, setActiveZone] = useState(Object.keys(data.zones)[0] || "ZONA DEFAULT");
             const [activeStreet, setActiveStreet] = useState(null);
             const [sidebarOpen, setSidebarOpen] = useState(false);
             const [zoomedImage, setZoomedImage] = useState(null); 
             
+            // Filtri
             const [searchTerm, setSearchTerm] = useState('');
             const [civicoFilter, setCivicoFilter] = useState('');
             const [nameFilter, setNameFilter] = useState('');
             const [reportStreetFilter, setReportStreetFilter] = useState('');
             const [reportCivicoFilter, setReportCivicoFilter] = useState('');
 
+            // Form Normale
             const [formMode, setFormMode] = useState(null); 
             const [formState, setFormState] = useState({ name: '', status: 'residente', civico: '', posCassetta: '' });
+            
+            // Form Aggiunta Rapida Globale
+            const [quickAddState, setQuickAddState] = useState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null });
             
             const [notification, setNotification] = useState(null);
             
@@ -206,15 +201,7 @@
             const speechRecRef = useRef(null);
 
             useEffect(() => {
-                const vecchiDati = localStorage.getItem('postino_data_v3');
-                if (vecchiDati && !localStorage.getItem('postino_data_v4_migrated')) {
-                    setData(JSON.parse(vecchiDati));
-                    localStorage.setItem('postino_data_v4_migrated', 'true');
-                }
-            }, []);
-
-            useEffect(() => {
-                localStorage.setItem('postino_data_v4', JSON.stringify(data));
+                localStorage.setItem('postino_data_v5', JSON.stringify(data));
             }, [data]);
 
             const notify = (msg) => {
@@ -222,17 +209,16 @@
                 setTimeout(() => setNotification(null), 3500);
             };
 
+            // Funzioni Gestione Zone e Strade
             const addZone = (name) => {
                 const zName = name.trim().toUpperCase();
-                if (!zName || data.zones[zName]) return notify("Zona non valida");
+                if (!zName || data.zones[zName]) return notify("Zona non valida o già presente");
                 setData(prev => ({ ...prev, zones: { ...prev.zones, [zName]: { streets: {} } } }));
-                setActiveZone(zName);
-                setActiveStreet(null); 
-                setSidebarOpen(false);
+                setActiveZone(zName); setActiveStreet(null); setSidebarOpen(false); setView('list');
             };
 
             const deleteZone = (zName) => {
-                if(!window.confirm(`Eliminare la ${zName}?`)) return;
+                if(!window.confirm(`Eliminare la ${zName}? Verranno persi tutti i dati al suo interno.`)) return;
                 setData(prev => {
                     const newData = { ...prev };
                     delete newData.zones[zName];
@@ -241,15 +227,13 @@
                     else { newData.zones = { "ZONA DEFAULT": { streets: {} } }; setActiveZone("ZONA DEFAULT"); }
                     return newData;
                 });
-                setActiveStreet(null); 
-                setSidebarOpen(false);
-                setView('list');
+                setActiveStreet(null); setSidebarOpen(false); setView('list');
             };
 
             const addStreet = (streetName) => {
                 const sName = streetName.trim().toUpperCase();
                 if (!sName) return;
-                if (data.zones[activeZone].streets[sName]) return notify("Via già presente");
+                if (data.zones[activeZone].streets[sName]) return notify("Via già presente in questa zona");
                 
                 setData(prev => ({
                     ...prev,
@@ -262,8 +246,10 @@
                     }
                 }));
                 setView('list');
+                notify("Via aggiunta!");
             };
 
+            // Salvataggio Normale
             const handleSaveResident = () => {
                 const { name, status, civico, posCassetta } = formState;
                 if (!name || !civico) return notify("Compila Nome e Civico");
@@ -272,24 +258,20 @@
                     const newData = { ...prev };
                     const street = newData.zones[activeZone].streets[activeStreet];
                     
-                    if (!street.civici[civico]) street.civici[civico] = { residents: [], photo: null };
+                    if (!street.civici[civico]) street.civici[civico] = { residents: [], photoCitofono: null, photoCassette: null };
 
                     if (formMode.type === 'edit') {
                         const idx = street.civici[formMode.civico].residents.findIndex(r => r.id === formMode.data.id);
                         if (formMode.civico !== civico) {
                             street.civici[formMode.civico].residents.splice(idx, 1);
-                            if (!street.civici[civico]) street.civici[civico] = { residents: [], photo: null };
+                            if (!street.civici[civico]) street.civici[civico] = { residents: [], photoCitofono: null, photoCassette: null };
                             street.civici[civico].residents.push({ ...formMode.data, name: name.toUpperCase(), status, posCassetta });
                         } else {
                             street.civici[civico].residents[idx] = { ...formMode.data, name: name.toUpperCase(), status, posCassetta };
                         }
                     } else {
                         street.civici[civico].residents.push({
-                            id: Date.now(),
-                            name: name.toUpperCase(),
-                            status,
-                            posCassetta: posCassetta || '',
-                            date: new Date().toLocaleDateString()
+                            id: Date.now(), name: name.toUpperCase(), status, posCassetta: posCassetta || '', date: new Date().toLocaleDateString()
                         });
                     }
                     return newData;
@@ -300,17 +282,81 @@
                 notify("Salvato!");
             };
 
-            const updateCivicoPhoto = (civico, photo, photoDate) => {
+            // Inserimento Rapido Globale
+            const handleQuickAddSave = () => {
+                const sName = quickAddState.street.trim().toUpperCase();
+                const cName = quickAddState.civico.trim().toUpperCase();
+                const rName = quickAddState.name.trim().toUpperCase();
+
+                if(!sName || !cName || !rName) return notify("Compila Via, Civico e Nome!");
+                
+                if(!data.zones[activeZone].streets[sName]) {
+                    return notify(`ERRORE: La via "${sName}" non esiste in ${activeZone}. Prima aggiungila!`);
+                }
+
                 setData(prev => {
                     const newData = { ...prev };
-                    newData.zones[activeZone].streets[activeStreet].civici[civico].photo = photo;
-                    newData.zones[activeZone].streets[activeStreet].civici[civico].photoDate = photoDate;
+                    const streetObj = newData.zones[activeZone].streets[sName];
+                    
+                    if (!streetObj.civici[cName]) {
+                        streetObj.civici[cName] = { residents: [], photoCitofono: null, dateCitofono: null, photoCassette: null, dateCassette: null };
+                    }
+
+                    streetObj.civici[cName].residents.push({
+                        id: Date.now(), name: rName, status: quickAddState.status, posCassetta: '', date: new Date().toLocaleDateString()
+                    });
+
+                    // Se è stata caricata una foto nel quick add, la salva come Citofono
+                    if(quickAddState.photoCitofono) {
+                        streetObj.civici[cName].photoCitofono = quickAddState.photoCitofono;
+                        streetObj.civici[cName].dateCitofono = new Date().toLocaleDateString();
+                    }
+
+                    return newData;
+                });
+
+                notify(`Aggiunto a ${sName}, ${cName}!`);
+                setQuickAddState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null });
+                setView('list'); // Torna alla dashboard
+            };
+
+            // Gestione Foto (Doppia foto: type = 'citofono' o 'cassette')
+            const updateCivicoPhoto = (civico, type, photo, photoDate) => {
+                setData(prev => {
+                    const newData = { ...prev };
+                    if(type === 'citofono') {
+                        newData.zones[activeZone].streets[activeStreet].civici[civico].photoCitofono = photo;
+                        newData.zones[activeZone].streets[activeStreet].civici[civico].dateCitofono = photoDate;
+                    } else {
+                        newData.zones[activeZone].streets[activeStreet].civici[civico].photoCassette = photo;
+                        newData.zones[activeZone].streets[activeStreet].civici[civico].dateCassette = photoDate;
+                    }
                     return newData;
                 });
             };
 
+            // Utilità per ridimensionare immagini prima di salvarle (Performance)
+            const processImageFile = (file, callback) => {
+                if(!file) return;
+                const fDate = file.lastModified ? new Date(file.lastModified).toLocaleDateString() : new Date().toLocaleDateString();
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        const MAX_WIDTH = 800; const scaleSize = MAX_WIDTH / img.width;
+                        canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        callback(canvas.toDataURL('image/jpeg', 0.6), fDate);
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            };
+
             const deleteResident = (civico, id) => {
-                if(!window.confirm("Eliminare?")) return;
+                if(!window.confirm("Eliminare definitivamente?")) return;
                 setData(prev => {
                     const newData = { ...prev };
                     const civ = newData.zones[activeZone].streets[activeStreet].civici[civico];
@@ -320,136 +366,77 @@
             };
 
             // ==========================================
-            // LOGICA INPUT AVANZATO (Voce / Offline)
+            // LOGICA AVANZATA MANTENUTA (OCR & Voce)
             // ==========================================
-
-            // 1. SCANSIONE OFFLINE (TAG)
             const handleOfflineScan = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-
-                setShowInputMenu(false); // Chiude il menu
-                setIsScanning(true);
-                setScanProgress(0);
+                setShowInputMenu(false); setIsScanning(true); setScanProgress(0);
 
                 try {
                     const result = await Tesseract.recognize(file, 'ita', {
-                        logger: m => {
-                            if (m.status === 'recognizing text') setScanProgress(Math.round(m.progress * 100));
-                        }
+                        logger: m => { if (m.status === 'recognizing text') setScanProgress(Math.round(m.progress * 100)); }
                     });
                     
                     const wordsArray = result.data.text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.trim().length > 0);
                     const cleanTags = wordsArray.map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toUpperCase())
                         .filter(w => {
                             if (/\d/.test(w)) return true;
-                            if (w.length <= 2) {
-                                const validTwoLetter = ['DE', 'DI', 'DA', 'LA', 'LO', 'LI', 'DEL', 'DAL'];
-                                return validTwoLetter.includes(w);
-                            }
+                            if (w.length <= 2) return ['DE', 'DI', 'DA', 'LA', 'LO', 'LI', 'DEL', 'DAL'].includes(w);
                             return w.length > 2; 
                         });
 
                     setOcrData({ tags: cleanTags, activeField: 'name', name: '', civico: '' });
                     setView('ocr-select');
                     notify("Tocca i tag per comporre la scheda.");
-
-                } catch (error) {
-                    console.error(error);
-                    notify("Scansione fallita.");
-                } finally {
-                    setIsScanning(false);
-                    e.target.value = null; // Resetta input
-                }
+                } catch (error) { notify("Scansione fallita."); } 
+                finally { setIsScanning(false); e.target.value = null; }
             };
 
-            // 2. DETTATURA VOCALE
             const startVoiceDictation = () => {
                 setShowInputMenu(false);
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                
-                if (!SpeechRecognition) {
-                    notify("Dettatura vocale non supportata sul tuo browser/dispositivo.");
-                    return;
-                }
+                if (!SpeechRecognition) return notify("Dettatura non supportata qui.");
 
                 const recognition = new SpeechRecognition();
-                recognition.lang = 'it-IT';
-                recognition.interimResults = false;
-                recognition.maxAlternatives = 1;
-                
+                recognition.lang = 'it-IT'; recognition.interimResults = false; recognition.maxAlternatives = 1;
                 speechRecRef.current = recognition;
 
                 recognition.onstart = () => setIsListening(true);
-                
-                recognition.onresult = (event) => {
-                    const transcript = event.results[0][0].transcript.toLowerCase();
-                    parseVoiceTranscript(transcript);
-                };
-                
-                recognition.onerror = (e) => {
-                    notify("Nessuna voce rilevata o errore microfono.");
-                    setIsListening(false);
-                };
-                
+                recognition.onresult = (event) => parseVoiceTranscript(event.results[0][0].transcript.toLowerCase());
+                recognition.onerror = () => { notify("Errore microfono."); setIsListening(false); };
                 recognition.onend = () => setIsListening(false);
-                
-                try {
-                    recognition.start();
-                } catch(e) {
-                    console.error(e);
-                }
+                try { recognition.start(); } catch(e) { console.error(e); }
             };
 
             const parseVoiceTranscript = (text) => {
-                // Esempio logica per "mario rossi civico 12 b" oppure "mario rossi 12"
-                let name = "";
-                let civico = "";
-                
+                let name = "", civico = "";
                 if (text.includes('civico')) {
                     const parts = text.split('civico');
-                    name = parts[0].trim();
-                    civico = parts[1].replace(/barra/g, '/').replace(/\s+/g, '').trim(); 
+                    name = parts[0].trim(); civico = parts[1].replace(/barra/g, '/').replace(/\s+/g, '').trim(); 
                 } else {
-                    const words = text.split(' ');
-                    const lastWord = words[words.length - 1];
-                    // Se l'ultima parola contiene un numero o è una singola lettera
+                    const words = text.split(' '); const lastWord = words[words.length - 1];
                     if (/\d/.test(lastWord) || lastWord.length === 1) {
                         civico = lastWord;
-                        // Controlliamo anche la penultima per numeri (es "12 b")
                         if (words.length > 1 && /\d/.test(words[words.length - 2])) {
                             civico = words[words.length - 2] + words[words.length - 1];
                             name = words.slice(0, -2).join(' ');
-                        } else {
-                            name = words.slice(0, -1).join(' ');
-                        }
-                    } else {
-                        name = text;
-                    }
+                        } else name = words.slice(0, -1).join(' ');
+                    } else name = text;
                 }
-
-                setFormState({ 
-                    name: name.toUpperCase(), 
-                    status: 'residente', 
-                    civico: civico ? civico.toUpperCase() : civicoFilter, 
-                    posCassetta: '' 
-                });
-                setFormMode({ type: 'add' });
-                setView('form');
-                notify("Dettatura acquisita!");
+                setFormState({ name: name.toUpperCase(), status: 'residente', civico: civico ? civico.toUpperCase() : civicoFilter, posCassetta: '' });
+                setFormMode({ type: 'add' }); setView('form'); notify("Dettatura acquisita!");
             };
-
-            const stopVoiceDictation = () => {
-                if(speechRecRef.current) speechRecRef.current.stop();
-                setIsListening(false);
-            };
+            const stopVoiceDictation = () => { if(speechRecRef.current) speechRecRef.current.stop(); setIsListening(false); };
 
             // ==========================================
-
+            // MEMOIZZAZIONI DATI PER LA UI
+            // ==========================================
+            const streetsInActiveZone = Object.keys(data.zones[activeZone]?.streets || {}).sort();
+            
             const filteredStreets = useMemo(() => {
-                const streets = data.zones[activeZone]?.streets || {};
-                return Object.keys(streets).filter(s => s.toLowerCase().includes(searchTerm.toLowerCase())).sort();
-            }, [data, activeZone, searchTerm]);
+                return streetsInActiveZone.filter(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
+            }, [streetsInActiveZone, searchTerm]);
 
             const civiciToDisplay = useMemo(() => {
                 if (!activeStreet) return [];
@@ -498,11 +485,9 @@
                 const config = getStatusColorConfig(status);
                 const active = current === status;
                 return (
-                    <button
-                        onClick={() => onClick(status)}
+                    <button onClick={() => onClick(status)}
                         className={`p-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm border-2
-                            ${active ? `${config.color} border-transparent ${config.text} scale-105` : 'bg-white border-slate-100 text-slate-400'}`}
-                    >
+                            ${active ? `${config.color} border-transparent ${config.text} scale-105` : 'bg-white border-slate-100 text-slate-400'}`}>
                         {config.label}
                     </button>
                 );
@@ -511,28 +496,32 @@
             return (
                 <div className="min-h-screen pb-24">
                     
-                    {/* --- MODAL DETTATURA VOCALE --- */}
+                    {/* --- SCHERMATE IN SOVRAPPOSIZIONE --- */}
                     {isListening && (
                         <div className="fixed inset-0 bg-slate-900/95 z-[300] flex flex-col items-center justify-center p-6 touch-none">
-                            <div className="relative w-28 h-28 flex items-center justify-center mic-ring mb-8 bg-red-500/20 rounded-full">
-                                <Mic size={48} className="text-red-500" />
-                            </div>
+                            <div className="relative w-28 h-28 flex items-center justify-center mic-ring mb-8 bg-red-500/20 rounded-full"><Mic size={48} className="text-red-500" /></div>
                             <h3 className="text-white text-3xl font-black uppercase mb-4 animate-pulse">In Ascolto...</h3>
-                            <p className="text-slate-300 text-lg font-bold text-center mb-10">
-                                Parla in modo chiaro:<br/>
-                                <span className="text-sm font-normal text-slate-400 italic mt-2 block">"Mario Rossi, civico dodici B"</span>
-                            </p>
-                            <button onClick={stopVoiceDictation} className="px-8 py-4 bg-white text-slate-900 rounded-full font-black uppercase shadow-xl active:scale-95 transition-transform">Interrompi / Annulla</button>
+                            <p className="text-slate-300 text-lg font-bold text-center mb-10">Parla in modo chiaro:<br/><span className="text-sm font-normal text-slate-400 italic mt-2 block">"Mario Rossi, civico dodici B"</span></p>
+                            <button onClick={stopVoiceDictation} className="px-8 py-4 bg-white text-slate-900 rounded-full font-black uppercase shadow-xl active:scale-95 transition-transform">Interrompi</button>
                         </div>
                     )}
 
-                    {/* --- MENU INPUT MULTIPLO --- */}
+                    {isScanning && (
+                        <div className="fixed inset-0 bg-slate-900/95 z-[300] flex flex-col items-center justify-center p-6 touch-none">
+                            <div className="relative w-24 h-24 flex items-center justify-center scanner-ring mb-8"><Scan size={40} className="text-blue-500" /></div>
+                            <h3 className="text-white text-xl font-black uppercase mb-2">Lettura in corso...</h3>
+                            <div className="w-full max-w-xs bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700 mt-6"><div className="bg-blue-500 h-full transition-all duration-300" style={{width: `${scanProgress}%`}}></div></div>
+                        </div>
+                    )}
+
+                    {zoomedImage && <ImageViewer imageObj={zoomedImage} onClose={() => setZoomedImage(null)} />}
+
+                    {/* MENU SCELTA METODO INSERIMENTO SULLA VIA */}
                     {showInputMenu && (
                         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end justify-center backdrop-blur-sm" onClick={() => setShowInputMenu(false)}>
                             <div className="bg-white w-full max-w-2xl rounded-t-[2.5rem] p-6 pb-12 animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
                                 <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                                 <h3 className="font-black italic text-2xl mb-6 text-slate-800 uppercase">Scegli Metodo</h3>
-
                                 <div className="space-y-4">
                                     <button onClick={startVoiceDictation} className="w-full bg-red-50 p-4 rounded-3xl flex items-center gap-4 active:scale-95 transition-all border border-red-100 shadow-sm">
                                         <div className="bg-red-500 text-white p-4 rounded-2xl shadow-inner"><Mic size={28} /></div>
@@ -541,131 +530,78 @@
                                             <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Veloce. Es: "Mario rossi civico 1"</p>
                                         </div>
                                     </button>
-
                                     <label className="w-full bg-slate-50 p-4 rounded-3xl flex items-center gap-4 active:scale-95 transition-all border border-slate-200 shadow-sm cursor-pointer">
                                         <div className="bg-slate-500 text-white p-4 rounded-2xl shadow-inner"><WifiOff size={28} /></div>
                                         <div className="text-left flex-1">
                                             <p className="font-black text-slate-800 uppercase text-lg leading-tight">Scansione Tag (Offline)</p>
                                             <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Scegli file o scatta foto</p>
                                         </div>
-                                        <input 
-                                            type="file" 
-                                            accept="image/*" 
-                                            className="hidden" 
-                                            onChange={handleOfflineScan} 
-                                        />
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleOfflineScan} />
                                     </label>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* --- MODAL SCANNER IN CORSO --- */}
-                    {isScanning && (
-                        <div className="fixed inset-0 bg-slate-900/95 z-[300] flex flex-col items-center justify-center p-6 touch-none">
-                            <div className="relative w-24 h-24 flex items-center justify-center scanner-ring mb-8">
-                                <Scan size={40} className="text-blue-500" />
-                            </div>
-                            <h3 className="text-white text-xl font-black uppercase mb-2">Lettura in corso...</h3>
-                            <p className="text-slate-400 text-sm font-bold text-center mb-6">
-                                Sto elaborando la foto.<br/>
-                                <span className="text-[10px] italic">Attendi qualche istante.</span>
-                            </p>
-                            <div className="w-full max-w-xs bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700">
-                                <div className="bg-blue-500 h-full transition-all duration-300" style={{width: `${scanProgress}%`}}></div>
-                            </div>
-                        </div>
-                    )}
-
-                    {zoomedImage && (
-                        <ImageViewer imageObj={zoomedImage} onClose={() => setZoomedImage(null)} />
-                    )}
-
-                    {sidebarOpen && (
-                        <div className="fixed inset-0 bg-black/50 z-[100] transition-opacity" onClick={() => setSidebarOpen(false)} />
-                    )}
-
+                    {/* --- SIDEBAR MENU (ZONE & BACKUP) --- */}
+                    {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-[100] transition-opacity" onClick={() => setSidebarOpen(false)} />}
                     <div className={`fixed top-0 left-0 h-full w-72 bg-slate-900 text-white z-[101] transform transition-transform shadow-2xl flex flex-col ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                         <div className="p-6 flex-1 overflow-y-auto">
                             <div className="flex justify-between items-center mb-8">
                                 <h2 className="text-xl font-black italic flex items-center gap-2"><Layers className="text-yellow-400" /> ZONE</h2>
                                 <button onClick={() => setSidebarOpen(false)} className="p-2 text-white"><X /></button>
                             </div>
-                            
                             <div className="space-y-2">
                                 {Object.keys(data.zones).sort().map(z => (
                                     <div key={z} className="flex items-center gap-2">
-                                        <button 
-                                            onClick={() => { setActiveZone(z); setActiveStreet(null); setView('list'); setSidebarOpen(false); }}
-                                            className={`flex-1 text-left p-4 rounded-xl font-bold flex justify-between items-center transition-colors
-                                                ${activeZone === z ? 'bg-yellow-400 text-black' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}
-                                        >
-                                            {z}
-                                            <ChevronRight size={16} />
+                                        <button onClick={() => { setActiveZone(z); setActiveStreet(null); setView('list'); setSidebarOpen(false); }}
+                                            className={`flex-1 text-left p-4 rounded-xl font-bold flex justify-between items-center transition-colors ${activeZone === z ? 'bg-yellow-400 text-black' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}>
+                                            {z} <ChevronRight size={16} />
                                         </button>
                                         <button onClick={() => deleteZone(z)} className="p-4 text-slate-500 hover:text-red-400 rounded-xl bg-white/5"><Trash2 size={16} /></button>
                                     </div>
                                 ))}
                             </div>
-
                             <button onClick={() => { const name = prompt("Nome Nuova Zona (es. ZONA C o 15):"); if(name) addZone(name); }} className="w-full mt-8 p-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 font-bold hover:text-white transition-colors">
                                 + AGGIUNGI ZONA
                             </button>
 
-                            <div className="mt-4 grid grid-cols-2 gap-2">
+                            <div className="mt-8 grid grid-cols-2 gap-2 border-t border-slate-800 pt-8">
                                 <button onClick={() => {
                                         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
-                                        const downloadAnchorNode = document.createElement('a');
-                                        downloadAnchorNode.setAttribute("href", dataStr);
-                                        downloadAnchorNode.setAttribute("download", `Postino_Backup_${activeZone.replace(' ','_')}.json`);
-                                        document.body.appendChild(downloadAnchorNode);
-                                        downloadAnchorNode.click();
-                                        downloadAnchorNode.remove();
-                                        notify("Backup salvato");
+                                        const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", `Postino_Backup_${activeZone.replace(' ','_')}.json`); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); notify("Backup salvato");
                                     }} className="p-4 bg-slate-800 rounded-xl text-slate-300 font-bold hover:text-white transition-colors flex flex-col items-center justify-center gap-1">
                                     <Save size={20} /> <span className="text-[10px]">SALVA</span>
                                 </button>
-                                
                                 <label className="p-4 bg-slate-800 rounded-xl text-slate-300 font-bold hover:text-white transition-colors flex flex-col items-center justify-center gap-1 cursor-pointer">
                                     <Upload size={20} /> <span className="text-[10px]">CARICA</span>
                                     <input type="file" accept=".json" className="hidden" onChange={(e) => {
-                                            const file = e.target.files[0];
-                                            if (!file) return;
-                                            if (!window.confirm("ATTENZIONE: Verranno cancellati tutti i dati. Vuoi procedere?")) { e.target.value = null; return; }
+                                            const file = e.target.files[0]; if (!file) return;
+                                            if (!window.confirm("ATTENZIONE: Verranno cancellati tutti i dati. Procedere?")) { e.target.value = null; return; }
                                             const reader = new FileReader();
                                             reader.onload = (event) => {
                                                 try {
                                                     const parsed = JSON.parse(event.target.result);
-                                                    if (parsed && parsed.zones) {
-                                                        setData(parsed);
-                                                        const keys = Object.keys(parsed.zones);
-                                                        if(keys.length > 0) setActiveZone(keys[0]);
-                                                        notify("Backup caricato con successo!");
-                                                        setSidebarOpen(false);
-                                                    } else notify("File non valido!");
-                                                } catch (error) { notify("Errore: file non valido."); }
-                                                e.target.value = null;
-                                            };
-                                            reader.readAsText(file);
+                                                    if (parsed && parsed.zones) { setData(parsed); const keys = Object.keys(parsed.zones); if(keys.length > 0) setActiveZone(keys[0]); notify("Backup caricato!"); setSidebarOpen(false); } 
+                                                    else notify("File non valido!");
+                                                } catch (error) { notify("Errore: file corrotto."); } e.target.value = null;
+                                            }; reader.readAsText(file);
                                         }} />
                                 </label>
                             </div>
                         </div>
                     </div>
 
+                    {/* --- HEADER SUPERIORE --- */}
                     <header className="bg-slate-900 text-white p-4 sticky top-0 z-50 shadow-md">
                         <div className="flex justify-between items-center max-w-2xl mx-auto">
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setSidebarOpen(true)} className="p-1 hover:bg-white/10 rounded-lg text-white"><Menu /></button>
                                 {view !== 'list' && view !== 'report' ? (
                                     <button onClick={() => { 
-                                        if (view === 'form' || view === 'ocr-select') {
-                                            setView('street-detail');
-                                            setOcrData(null);
-                                        } else {
-                                            setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); 
-                                        }
-                                    }} className="p-1 text-white"><ArrowLeft /></button>
+                                        if (view === 'form' || view === 'ocr-select') { setView('street-detail'); setOcrData(null); } 
+                                        else { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); }
+                                    }} className="p-1 text-white flex items-center gap-1 bg-slate-800 rounded-lg pr-3"><ArrowLeft /> <span className="text-xs font-bold">Indietro</span></button>
                                 ) : (
                                     <div>
                                         <h1 className="text-sm font-black text-yellow-400 uppercase leading-none tracking-tighter">POSTMAN APP</h1>
@@ -674,89 +610,123 @@
                                 )}
                             </div>
                             <div className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> v5.4
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> v5.5
                             </div>
                         </div>
                     </header>
 
                     <main className="max-w-2xl mx-auto p-4">
+                        {/* NOTIFICHE FLOATING */}
                         {notification && (
-                            <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black shadow-2xl z-[150] text-sm animate-bounce whitespace-nowrap z-[400]">
+                            <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black shadow-2xl z-[400] text-sm animate-bounce whitespace-nowrap">
                                 {notification}
                             </div>
                         )}
 
-                        {/* --- VIEW: SELEZIONE TAG OCR --- */}
+                        {/* ==================================================== */}
+                        {/* VISTA: INSERIMENTO RAPIDO GLOBALE (Dalla Dashboard) */}
+                        {/* ==================================================== */}
+                        {view === 'quick-add' && (
+                            <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-10 duration-300">
+                                <h2 className="text-2xl font-black italic uppercase text-slate-900 mb-2 flex items-center gap-2"><Zap className="text-yellow-400"/> Rapido Globale</h2>
+                                <p className="text-xs text-slate-500 font-bold mb-6">Inserisci una segnalazione in qualsiasi via di <span className="text-blue-600">{activeZone}</span>.</p>
+                                
+                                <div className="space-y-5">
+                                    <div className="relative">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Via (Esistente)</label>
+                                        <input type="text" list="streets-list" className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black border-none ring-1 ring-slate-200 uppercase" placeholder="INIZIA A SCRIVERE..." value={quickAddState.street} onChange={(e) => setQuickAddState({...quickAddState, street: e.target.value.toUpperCase()})} />
+                                        <MapPin className="absolute left-3 top-10 text-slate-400 pointer-events-none" size={18} />
+                                        <datalist id="streets-list">
+                                            {streetsInActiveZone.map(s => <option key={s} value={s} />)}
+                                        </datalist>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es. 12, 14)</label>
+                                            <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" value={quickAddState.civico} onChange={(e) => setQuickAddState({...quickAddState, civico: e.target.value.toUpperCase()})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Foto Citofono (Opz)</label>
+                                            <label className={`w-full p-3 h-[60px] flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed cursor-pointer transition-colors ${quickAddState.photoCitofono ? 'bg-green-50 border-green-400 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}>
+                                                {quickAddState.photoCitofono ? <><CheckCircle size={18} /><span className="font-bold text-xs uppercase">Caricata</span></> : <><Camera size={18} /><span className="font-bold text-xs uppercase">Scatta</span></>}
+                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64) => setQuickAddState({...quickAddState, photoCitofono: base64}))} />
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome/Cognome</label>
+                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200" placeholder="ROSSI MARIO" value={quickAddState.name} onChange={(e) => setQuickAddState({...quickAddState, name: e.target.value.toUpperCase()})} />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">Stato</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {['sconosciuto', 'trasferito', 'irreperibile'].map(st => <StatusButton key={st} status={st} current={quickAddState.status} onClick={(s) => setQuickAddState({...quickAddState, status: s})} />)}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-4 pt-4 border-t border-slate-100">
+                                        <button onClick={() => setView('list')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
+                                        <button onClick={handleQuickAddSave} className="flex-[2] py-4 bg-yellow-400 text-black rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform flex items-center justify-center gap-2"><Zap size={18}/> Salva in Strada</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* VISTA: OCR SELECT */}
                         {view === 'ocr-select' && ocrData && (
                             <div className="space-y-6 animate-in fade-in duration-300">
                                 <div>
                                     <h2 className="text-3xl font-black italic uppercase leading-tight text-slate-800">Scansione OK</h2>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tocca le parole scansionate per riempire i campi</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tocca le parole per riempire i campi</p>
                                 </div>
-
                                 <div className="space-y-4">
                                     <div onClick={() => setOcrData({...ocrData, activeField: 'name'})} className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${ocrData.activeField === 'name' ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/20' : 'border-slate-200 bg-white'}`}>
                                         <div className="flex justify-between items-center mb-1">
                                             <span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'name' ? 'text-blue-600' : 'text-slate-400'}`}>1. Componi Nome</span>
                                             {ocrData.name && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, name: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}
                                         </div>
-                                        <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">
-                                            {ocrData.name || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}
-                                        </div>
+                                        <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">{ocrData.name || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}</div>
                                     </div>
-
                                     <div onClick={() => setOcrData({...ocrData, activeField: 'civico'})} className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${ocrData.activeField === 'civico' ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/20' : 'border-slate-200 bg-white'}`}>
                                         <div className="flex justify-between items-center mb-1">
                                             <span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'civico' ? 'text-blue-600' : 'text-slate-400'}`}>2. Seleziona Civico</span>
                                             {ocrData.civico && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, civico: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}
                                         </div>
-                                        <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">
-                                            {ocrData.civico || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}
-                                        </div>
+                                        <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">{ocrData.civico || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}</div>
                                     </div>
                                 </div>
-
                                 <div className="bg-white p-5 rounded-[2rem] shadow-inner border border-slate-200">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-4 text-center tracking-widest"><Scan size={14} className="inline mr-1" /> Dati Letti dalla Lettera</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-4 text-center tracking-widest"><Scan size={14} className="inline mr-1" /> Dati Letti</p>
                                     <div className="flex flex-wrap gap-2 justify-center">
                                         {ocrData.tags.map((tag, i) => (
-                                            <button 
-                                                key={i}
-                                                onClick={() => {
+                                            <button key={i} onClick={() => {
                                                     setOcrData(prev => {
-                                                        if (prev.activeField === 'name') {
-                                                            return { ...prev, name: prev.name ? prev.name + ' ' + tag : tag };
-                                                        } else {
-                                                            return { ...prev, civico: prev.civico ? prev.civico + ' ' + tag : tag };
-                                                        }
+                                                        if (prev.activeField === 'name') return { ...prev, name: prev.name ? prev.name + ' ' + tag : tag };
+                                                        else return { ...prev, civico: prev.civico ? prev.civico + ' ' + tag : tag };
                                                     });
-                                                }}
-                                                className="bg-slate-100 border border-slate-200 hover:bg-yellow-100 hover:border-yellow-300 text-slate-800 font-black px-4 py-3 rounded-2xl text-sm transition-colors uppercase active:scale-95 shadow-sm"
-                                            >
+                                                }} className="bg-slate-100 border border-slate-200 hover:bg-yellow-100 hover:border-yellow-300 text-slate-800 font-black px-4 py-3 rounded-2xl text-sm transition-colors uppercase active:scale-95 shadow-sm">
                                                 {tag}
                                             </button>
                                         ))}
                                     </div>
                                     {ocrData.tags.length === 0 && <p className="text-center text-slate-400 text-sm italic">Nessun testo leggibile trovato.</p>}
                                 </div>
-
                                 <div className="flex gap-4 pt-4">
                                     <button onClick={() => { setView('street-detail'); setOcrData(null); }} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
-                                    <button 
-                                        onClick={() => {
+                                    <button onClick={() => {
                                             setFormState({ name: ocrData.name.toUpperCase(), status: 'residente', civico: ocrData.civico.toUpperCase(), posCassetta: '' });
-                                            setFormMode({ type: 'add' });
-                                            setView('form');
-                                            setOcrData(null);
-                                        }} 
-                                        className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform"
-                                    >
+                                            setFormMode({ type: 'add' }); setView('form'); setOcrData(null);
+                                        }} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform">
                                         Vai al Form
                                     </button>
                                 </div>
                             </div>
                         )}
 
+                        {/* VISTA: REPORT / RIEPILOGO */}
                         {view === 'report' && (
                             <div className="space-y-4 animate-in fade-in duration-300">
                                 <div className="flex justify-between items-end mb-2">
@@ -813,12 +783,21 @@
                             </div>
                         )}
 
+                        {/* VISTA: LISTA STRADE (DASHBOARD) */}
                         {view === 'list' && (
                             <div className="space-y-4">
                                 <div className="relative">
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Search size={20} /></div>
                                     <input type="text" placeholder="CERCA STRADA..." className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 outline-none font-bold uppercase" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                                 </div>
+                                
+                                {/* Pulsante Inserimento Rapido */}
+                                <button onClick={() => { setQuickAddState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null }); setView('quick-add'); }} 
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-2xl flex items-center justify-center gap-3 shadow-md active:scale-95 transition-all mb-2 border border-blue-500">
+                                    <Zap size={22} className="text-yellow-300" />
+                                    <span className="font-black uppercase tracking-tight text-sm">Inserimento Rapido Globale</span>
+                                </button>
+
                                 <div className="grid gap-3">
                                     {filteredStreets.map(street => (
                                         <button key={street} onClick={() => { setActiveStreet(street); setView('street-detail'); }} className="bg-white p-5 rounded-2xl flex justify-between items-center shadow-sm active:scale-[0.98] transition-all border border-transparent hover:border-yellow-400">
@@ -832,23 +811,28 @@
                                     {filteredStreets.length === 0 && (
                                         <div className="text-center py-20 opacity-30">
                                             <div className="flex justify-center mb-2"><MapPin size={48} /></div>
-                                            <p className="font-black uppercase text-xs">Nessuna via in questa zona</p>
+                                            <p className="font-black uppercase text-xs">Nessuna via trovata</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
                         )}
 
+                        {/* VISTA: DETTAGLIO STRADA (CIVICI) */}
                         {view === 'street-detail' && activeStreet && (
                             <div className="space-y-4 animate-in fade-in duration-300">
                                 <div className="flex justify-between items-end">
                                     <h2 className="text-3xl font-black italic uppercase leading-tight flex-1">{activeStreet}</h2>
                                     <button onClick={() => { if(window.confirm("Eliminare questa via?")) { setData(prev => { const nd = {...prev}; delete nd.zones[activeZone].streets[activeStreet]; return nd; }); setView('list'); } }} className="text-slate-300 p-2"><Trash2 size={20} /></button>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
+                                
+                                {/* Suggerimento per i multi-civici */}
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-200 px-3 py-1 rounded-full inline-block">Cerca "14" per trovare anche "12, 14, 16"</p>
+                                
+                                <div className="grid grid-cols-2 gap-2 mt-2">
                                     <div className="relative">
                                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Filter size={14} /></div>
-                                        <input type="text" placeholder="CIVICO..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={civicoFilter} onChange={(e) => setCivicoFilter(e.target.value.toUpperCase())} />
+                                        <input type="text" placeholder="CIVICO (ES: 12)..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={civicoFilter} onChange={(e) => setCivicoFilter(e.target.value.toUpperCase())} />
                                     </div>
                                     <div className="relative">
                                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Search size={14} /></div>
@@ -856,81 +840,86 @@
                                     </div>
                                 </div>
 
-                                {/* Nuovi Pulsanti: Manuale / INSERIMENTO MULTIPLO */}
                                 <div className="flex gap-2 mt-4">
-                                    <button 
-                                        onClick={() => {
-                                            setFormState({ name: '', status: 'residente', civico: civicoFilter, posCassetta: '' });
-                                            setFormMode({ type: 'add' });
-                                            setView('form');
-                                        }}
-                                        className="flex-[1] py-4 bg-slate-900 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-xs"
-                                    >
+                                    <button onClick={() => { setFormState({ name: '', status: 'residente', civico: civicoFilter, posCassetta: '' }); setFormMode({ type: 'add' }); setView('form'); }}
+                                        className="flex-[1] py-4 bg-slate-900 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-xs">
                                         <UserPlus size={16} /> A MANO
                                     </button>
-                                    
-                                    <button 
-                                        onClick={() => setShowInputMenu(true)}
-                                        className="flex-[2] py-4 bg-blue-600 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-sm"
-                                    >
-                                        <Zap size={20} className="text-yellow-300" /> INSERIMENTO RAPIDO
+                                    <button onClick={() => setShowInputMenu(true)}
+                                        className="flex-[2] py-4 bg-blue-600 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-sm">
+                                        <Zap size={20} className="text-yellow-300" /> LETTURA VELOCE
                                     </button>
                                 </div>
 
-                                <div className="space-y-6 mt-4">
+                                <div className="space-y-8 mt-6">
                                     {civiciToDisplay.map(cNum => {
                                         const civicoData = data.zones[activeZone].streets[activeStreet].civici[cNum];
                                         return (
-                                            <div key={cNum} className="bg-white rounded-[2rem] overflow-hidden shadow-md border border-slate-100">
-                                                <div className="h-24 relative bg-slate-200">
-                                                    {civicoData.photo ? (
-                                                        <img src={civicoData.photo} className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="civico" onClick={() => setZoomedImage({ photo: civicoData.photo, date: civicoData.photoDate })} />
-                                                    ) : (
-                                                        <div className="w-full h-full flex flex-row gap-2 items-center justify-center text-slate-400 opacity-50"><ImageIcon size={24} /><span className="text-[10px] font-black uppercase">Foto Citofono</span></div>
-                                                    )}
-                                                    <div className="absolute top-2 left-4 bg-slate-900/80 backdrop-blur px-3 py-1 rounded-full text-white text-xs font-black italic pointer-events-none">CIVICO {cNum}</div>
-                                                    <label className="absolute bottom-2 right-4 bg-yellow-400 text-black p-2 rounded-xl shadow-xl cursor-pointer active:scale-90 transition-transform flex items-center justify-center gap-1">
-                                                        <Camera size={16} />
-                                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                                                                const file = e.target.files[0];
-                                                                if(file) {
-                                                                    const fDate = file.lastModified ? new Date(file.lastModified).toLocaleDateString() : new Date().toLocaleDateString();
-                                                                    const reader = new FileReader();
-                                                                    reader.onloadend = () => {
-                                                                        const img = new Image();
-                                                                        img.onload = () => {
-                                                                            const canvas = document.createElement('canvas');
-                                                                            const ctx = canvas.getContext('2d');
-                                                                            const MAX_WIDTH = 800; const scaleSize = MAX_WIDTH / img.width;
-                                                                            canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
-                                                                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                                                            updateCivicoPhoto(cNum, canvas.toDataURL('image/jpeg', 0.6), fDate);
-                                                                        };
-                                                                        img.src = reader.result;
-                                                                    };
-                                                                    reader.readAsDataURL(file);
-                                                                }
-                                                            }} />
-                                                    </label>
-                                                    {civicoData.photo && <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Rimuovere foto?')) updateCivicoPhoto(cNum, null); }} className="absolute bottom-2 right-14 bg-red-500 text-white p-2 rounded-xl shadow-xl active:scale-90 transition-transform"><Trash2 size={16} /></button>}
+                                            <div key={cNum} className="bg-white rounded-[2rem] overflow-hidden shadow-md border border-slate-200">
+                                                {/* INTESTAZIONE CIVICO */}
+                                                <div className="bg-slate-900 text-white p-3 flex justify-between items-center relative z-10 shadow-md">
+                                                    <span className="font-black italic text-lg ml-2">CIVICO {cNum}</span>
+                                                    <div className="flex gap-1">
+                                                        <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold">{civicoData.residents.length} Nomi</span>
+                                                    </div>
                                                 </div>
-                                                <div className="divide-y divide-slate-50">
+
+                                                {/* ZONA DOPPIA FOTO (Citofono / Cassette) */}
+                                                <div className="grid grid-cols-2 h-28 bg-slate-100 divide-x-2 divide-white">
+                                                    {/* FOTO CITOFONO */}
+                                                    <div className="relative group">
+                                                        {civicoData.photoCitofono ? (
+                                                            <>
+                                                                <img src={civicoData.photoCitofono} className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" alt="citofono" onClick={() => setZoomedImage({ photo: civicoData.photoCitofono, date: civicoData.dateCitofono, type: 'citofono' })} />
+                                                                <div className="absolute top-1 left-2 bg-black/60 px-2 py-0.5 rounded text-[8px] font-black text-white pointer-events-none">CITOFONO</div>
+                                                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Rimuovere foto citofono?')) updateCivicoPhoto(cNum, 'citofono', null, null); }} className="absolute bottom-1 right-1 bg-red-500/90 text-white p-1.5 rounded-lg active:scale-90"><Trash2 size={12} /></button>
+                                                            </>
+                                                        ) : (
+                                                            <label className="w-full h-full flex flex-col items-center justify-center text-slate-400 hover:bg-slate-200 transition-colors cursor-pointer active:bg-slate-300">
+                                                                <ImageIcon size={24} className="mb-1 opacity-50" />
+                                                                <span className="text-[9px] font-black uppercase tracking-tight">+ Foto Citofono</span>
+                                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64, date) => updateCivicoPhoto(cNum, 'citofono', base64, date))} />
+                                                            </label>
+                                                        )}
+                                                    </div>
+
+                                                    {/* FOTO CASSETTE */}
+                                                    <div className="relative group">
+                                                        {civicoData.photoCassette ? (
+                                                            <>
+                                                                <img src={civicoData.photoCassette} className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" alt="cassette" onClick={() => setZoomedImage({ photo: civicoData.photoCassette, date: civicoData.dateCassette, type: 'cassette' })} />
+                                                                <div className="absolute top-1 left-2 bg-black/60 px-2 py-0.5 rounded text-[8px] font-black text-yellow-400 pointer-events-none">CASSETTE</div>
+                                                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Rimuovere foto cassette?')) updateCivicoPhoto(cNum, 'cassette', null, null); }} className="absolute bottom-1 right-1 bg-red-500/90 text-white p-1.5 rounded-lg active:scale-90"><Trash2 size={12} /></button>
+                                                            </>
+                                                        ) : (
+                                                            <label className="w-full h-full flex flex-col items-center justify-center text-slate-400 hover:bg-slate-200 transition-colors cursor-pointer active:bg-slate-300">
+                                                                <Mailbox size={24} className="mb-1 opacity-50" />
+                                                                <span className="text-[9px] font-black uppercase tracking-tight">+ Foto Cassette</span>
+                                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64, date) => updateCivicoPhoto(cNum, 'cassette', base64, date))} />
+                                                            </label>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* LISTA RESIDENTI */}
+                                                <div className="divide-y divide-slate-100 bg-white">
                                                     {civicoData.residents.map(res => (
-                                                        <div key={res.id} className="py-2 px-4 flex justify-between items-center group active:bg-slate-50">
+                                                        <div key={res.id} className="py-3 px-4 flex justify-between items-center group active:bg-slate-50">
                                                             <div className="flex-1">
                                                                 <p className="font-black text-slate-800 uppercase leading-tight tracking-tight mb-1">{res.name}</p>
                                                                 <div className="flex items-center gap-2 flex-wrap">
                                                                     <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${res.status === 'residente' ? 'bg-green-100 text-green-700' : res.status === 'sconosciuto' ? 'bg-red-100 text-red-700' : res.status === 'trasferito' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'}`}>{res.status}</span>
                                                                     {res.posCassetta && <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">Pos: {res.posCassetta}</span>}
-                                                                    <span className="text-[8px] text-slate-300 font-bold">{res.date}</span>
+                                                                    <span className="text-[8px] text-slate-400 font-bold">{res.date}</span>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex gap-1">
-                                                                <button onClick={() => { setFormState({ name: res.name, status: res.status, civico: cNum, posCassetta: res.posCassetta || '' }); setFormMode({ type: 'edit', data: res, civico: cNum }); setView('form'); }} className="p-2 text-slate-300 hover:text-slate-900"><Edit2 size={18} /></button>
-                                                                <button onClick={() => deleteResident(cNum, res.id)} className="p-2 text-slate-200 hover:text-red-500"><X size={18} /></button>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => { setFormState({ name: res.name, status: res.status, civico: cNum, posCassetta: res.posCassetta || '' }); setFormMode({ type: 'edit', data: res, civico: cNum }); setView('form'); }} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-900 border border-slate-200 active:bg-slate-200"><Edit2 size={16} /></button>
+                                                                <button onClick={() => deleteResident(cNum, res.id)} className="p-2 bg-red-50 rounded-xl text-red-400 hover:text-red-600 border border-red-100 active:bg-red-200"><Trash2 size={16} /></button>
                                                             </div>
                                                         </div>
                                                     ))}
+                                                    {civicoData.residents.length === 0 && <div className="text-center py-6 text-xs font-bold text-slate-400 uppercase italic">Nessun nome associato a questo civico</div>}
                                                 </div>
                                             </div>
                                         );
@@ -939,14 +928,15 @@
                             </div>
                         )}
 
+                        {/* VISTA: FORM INSERIMENTO/MODIFICA (Specifico Civico) */}
                         {view === 'form' && (
                             <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-10 duration-300">
                                 <h2 className="text-2xl font-black italic uppercase text-slate-900 mb-6">{formMode?.type === 'edit' ? 'Modifica Scheda' : 'Nuovo Ingresso'}</h2>
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico</label>
-                                            <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" value={formState.civico} onChange={(e) => setFormState({...formState, civico: e.target.value.toUpperCase()})} />
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es: 12, 14)</label>
+                                            <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" placeholder="12, 14" value={formState.civico} onChange={(e) => setFormState({...formState, civico: e.target.value.toUpperCase()})} />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Pos. Cassetta</label>
@@ -954,7 +944,7 @@
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome sul Campanello</label>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome/Cognome / Ditta</label>
                                         <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200" placeholder="ROSSI MARIO" value={formState.name} onChange={(e) => setFormState({...formState, name: e.target.value})} />
                                     </div>
                                     <div>
@@ -963,7 +953,7 @@
                                             {['residente', 'sconosciuto', 'trasferito', 'irreperibile', 'deceduto'].map(st => <StatusButton key={st} status={st} current={formState.status} onClick={(s) => setFormState({...formState, status: s})} />)}
                                         </div>
                                     </div>
-                                    <div className="flex gap-4 pt-6">
+                                    <div className="flex gap-4 pt-6 border-t border-slate-100">
                                         <button onClick={() => setView('street-detail')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
                                         <button onClick={handleSaveResident} className="flex-[2] py-4 bg-yellow-400 text-black rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform">Conferma Dati</button>
                                     </div>
@@ -971,6 +961,7 @@
                             </div>
                         )}
 
+                        {/* VISTA: AGGIUNGI STRADA */}
                         {view === 'add-street' && (
                             <div className="bg-white p-8 rounded-[3rem] shadow-2xl space-y-6 border border-slate-100">
                                 <div>
@@ -986,15 +977,16 @@
                         )}
                     </main>
 
+                    {/* NAVIGAZIONE INFERIORE */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-4 pb-10 flex justify-around items-center z-[80] shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
-                        <button onClick={() => { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); }} className={`flex flex-col items-center gap-1 ${view === 'list' ? 'text-slate-900' : 'text-slate-400'}`}>
+                        <button onClick={() => { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); }} className={`flex flex-col items-center gap-1 transition-colors ${view === 'list' || view === 'quick-add' ? 'text-slate-900' : 'text-slate-400'}`}>
                             <div><Home size={22} /></div>
                             <span className="text-[9px] font-black uppercase italic">Dashboard</span>
                         </button>
                         <button onClick={() => setView('add-street')} className="bg-yellow-400 text-black p-4 rounded-3xl -mt-16 shadow-2xl border-4 border-slate-50 active:scale-90 transition-transform flex items-center justify-center">
                             <div><Plus size={32} strokeWidth={3} /></div>
                         </button>
-                        <button onClick={() => { setView('report'); setReportStreetFilter(''); setReportCivicoFilter(''); }} className={`flex flex-col items-center gap-1 ${view === 'report' ? 'text-slate-900' : 'text-slate-400'}`}>
+                        <button onClick={() => { setView('report'); setReportStreetFilter(''); setReportCivicoFilter(''); }} className={`flex flex-col items-center gap-1 transition-colors ${view === 'report' ? 'text-slate-900' : 'text-slate-400'}`}>
                             <div><ClipboardList size={22} /></div>
                             <span className="text-[9px] font-black uppercase italic">Riepilogo</span>
                         </button>
