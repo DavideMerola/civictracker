@@ -63,8 +63,19 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         const Icon = ({ name, size = 24, className = "", strokeWidth = 2 }) => {
-            useEffect(() => { lucide.createIcons(); }, [name]);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className} stroke-width={strokeWidth}></i>;
+            const spanRef = useRef(null);
+            
+            useEffect(() => {
+                if (spanRef.current) {
+                    // Inseriamo il tag <i> manualmente all'interno di uno span.
+                    // In questo modo React gestisce solo lo <span> in modo sicuro,
+                    // e Lucide può scambiare il contenuto interno senza mandare in crash React.
+                    spanRef.current.innerHTML = `<i data-lucide="${name}" class="${className}" stroke-width="${strokeWidth}" width="${size}" height="${size}"></i>`;
+                    lucide.createIcons({ root: spanRef.current });
+                }
+            }, [name, className, strokeWidth, size]);
+            
+            return <span ref={spanRef} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} />;
         };
 
         // Icone base
@@ -188,6 +199,9 @@
             
             // Form Aggiunta Rapida Globale
             const [quickAddState, setQuickAddState] = useState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null });
+            
+            // NUOVO: Stato per l'inserimento "Solo Foto Veloce"
+            const [quickPhotoState, setQuickPhotoState] = useState({ street: '', civico: '', type: 'citofono', photo: null });
             
             const [notification, setNotification] = useState(null);
             
@@ -318,6 +332,41 @@
                 notify(`Aggiunto a ${sName}, ${cName}!`);
                 setQuickAddState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null });
                 setView('list'); // Torna alla dashboard
+            };
+
+            // Inserimento Solo Foto
+            const handleQuickPhotoSave = () => {
+                const sName = quickPhotoState.street.trim().toUpperCase();
+                const cName = quickPhotoState.civico.trim().toUpperCase();
+
+                if(!sName || !cName || !quickPhotoState.photo) return notify("Compila Via, Civico e acquisisci la Foto!");
+                
+                if(!data.zones[activeZone].streets[sName]) {
+                    return notify(`ERRORE: La via "${sName}" non esiste in ${activeZone}. Prima aggiungila!`);
+                }
+
+                setData(prev => {
+                    const newData = { ...prev };
+                    const streetObj = newData.zones[activeZone].streets[sName];
+                    
+                    if (!streetObj.civici[cName]) {
+                        streetObj.civici[cName] = { residents: [], photoCitofono: null, dateCitofono: null, photoCassette: null, dateCassette: null };
+                    }
+
+                    if(quickPhotoState.type === 'citofono') {
+                        streetObj.civici[cName].photoCitofono = quickPhotoState.photo;
+                        streetObj.civici[cName].dateCitofono = new Date().toLocaleDateString();
+                    } else {
+                        streetObj.civici[cName].photoCassette = quickPhotoState.photo;
+                        streetObj.civici[cName].dateCassette = new Date().toLocaleDateString();
+                    }
+
+                    return newData;
+                });
+
+                notify(`Foto aggiunta a ${sName}, ${cName}!`);
+                setQuickPhotoState({ street: '', civico: '', type: 'citofono', photo: null });
+                setView('list'); 
             };
 
             // Gestione Foto (Doppia foto: type = 'citofono' o 'cassette')
@@ -675,6 +724,65 @@
                             </div>
                         )}
 
+                        {/* ==================================================== */}
+                        {/* VISTA: INSERIMENTO SOLO FOTO VELOCE                  */}
+                        {/* ==================================================== */}
+                        {view === 'quick-photo' && (
+                            <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-10 duration-300">
+                                <h2 className="text-2xl font-black italic uppercase text-slate-900 mb-2 flex items-center gap-2"><Camera className="text-indigo-500"/> Solo Foto</h2>
+                                <p className="text-xs text-slate-500 font-bold mb-6">Mappa rapidamente un citofono o cassetta in <span className="text-blue-600">{activeZone}</span> senza inserire nomi.</p>
+                                
+                                <div className="space-y-5">
+                                    <div className="relative">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Via (Esistente)</label>
+                                        <input type="text" list="streets-list-photo" className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black border-none ring-1 ring-slate-200 uppercase" placeholder="INIZIA A SCRIVERE..." value={quickPhotoState.street} onChange={(e) => setQuickPhotoState({...quickPhotoState, street: e.target.value.toUpperCase()})} />
+                                        <MapPin className="absolute left-3 top-10 text-slate-400 pointer-events-none" size={18} />
+                                        <datalist id="streets-list-photo">
+                                            {streetsInActiveZone.map(s => <option key={s} value={s} />)}
+                                        </datalist>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es. 12, 14)</label>
+                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" value={quickPhotoState.civico} onChange={(e) => setQuickPhotoState({...quickPhotoState, civico: e.target.value.toUpperCase()})} />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">Tipo di Foto</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button onClick={() => setQuickPhotoState({...quickPhotoState, type: 'citofono'})} className={`p-3 rounded-xl font-black text-xs uppercase transition-all shadow-sm border-2 ${quickPhotoState.type === 'citofono' ? 'bg-blue-600 border-transparent text-white scale-105' : 'bg-white border-slate-100 text-slate-400'}`}>Citofono</button>
+                                            <button onClick={() => setQuickPhotoState({...quickPhotoState, type: 'cassette'})} className={`p-3 rounded-xl font-black text-xs uppercase transition-all shadow-sm border-2 ${quickPhotoState.type === 'cassette' ? 'bg-yellow-500 border-transparent text-white scale-105' : 'bg-white border-slate-100 text-slate-400'}`}>Cassette</button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Scatta o Carica</label>
+                                        <label className={`w-full p-6 h-[120px] flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed cursor-pointer transition-colors ${quickPhotoState.photo ? 'bg-green-50 border-green-400 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}>
+                                            {quickPhotoState.photo ? (
+                                                <>
+                                                    <CheckCircle size={32} />
+                                                    <span className="font-black text-sm uppercase">Foto Acquisita!</span>
+                                                    <span className="text-[10px] uppercase font-bold text-green-600/70">Tocca per rifare</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Camera size={32} />
+                                                    <span className="font-black text-sm uppercase">Acquisisci Immagine</span>
+                                                    <span className="text-[10px] uppercase font-bold text-slate-400">Si aprirà fotocamera o galleria</span>
+                                                </>
+                                            )}
+                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64) => setQuickPhotoState({...quickPhotoState, photo: base64}))} />
+                                        </label>
+                                    </div>
+
+                                    <div className="flex gap-4 pt-4 border-t border-slate-100">
+                                        <button onClick={() => setView('list')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
+                                        <button onClick={handleQuickPhotoSave} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform flex items-center justify-center gap-2"><Camera size={18}/> Salva Foto</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* VISTA: OCR SELECT */}
                         {view === 'ocr-select' && ocrData && (
                             <div className="space-y-6 animate-in fade-in duration-300">
@@ -791,12 +899,19 @@
                                     <input type="text" placeholder="CERCA STRADA..." className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 outline-none font-bold uppercase" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                                 </div>
                                 
-                                {/* Pulsante Inserimento Rapido */}
-                                <button onClick={() => { setQuickAddState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null }); setView('quick-add'); }} 
-                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-2xl flex items-center justify-center gap-3 shadow-md active:scale-95 transition-all mb-2 border border-blue-500">
-                                    <Zap size={22} className="text-yellow-300" />
-                                    <span className="font-black uppercase tracking-tight text-sm">Inserimento Rapido Globale</span>
-                                </button>
+                                {/* Pulsanti Inserimento Rapido */}
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <button onClick={() => { setQuickAddState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null }); setView('quick-add'); }} 
+                                            className="w-full bg-blue-600 text-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-md active:scale-95 transition-all border border-blue-500">
+                                        <Zap size={24} className="text-yellow-300" />
+                                        <span className="font-black uppercase tracking-tight text-xs text-center">Persona<br/>Veloce</span>
+                                    </button>
+                                    <button onClick={() => { setQuickPhotoState({ street: '', civico: '', type: 'citofono', photo: null }); setView('quick-photo'); }} 
+                                            className="w-full bg-indigo-600 text-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-md active:scale-95 transition-all border border-indigo-500">
+                                        <Camera size={24} className="text-indigo-200" />
+                                        <span className="font-black uppercase tracking-tight text-xs text-center">Solo<br/>Foto Veloce</span>
+                                    </button>
+                                </div>
 
                                 <div className="grid gap-3">
                                     {filteredStreets.map(street => (
