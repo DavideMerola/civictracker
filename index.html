@@ -5,29 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Postino Smart</title>
     
-    <!-- Configurazione PWA e Icona per iOS -->
+    <!-- Configurazione PWA -->
     <link rel="icon" type="image/png" href="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f4eb.png" />
     <link rel="apple-touch-icon" href="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f4eb.png" />
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Postino">
     
-    <!-- Inclusione di React e ReactDOM -->
+    <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- Inclusione di Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- Inclusione di Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Inclusione di Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Inclusione Tesseract.js per OCR Lettura Lettere -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
+    <!-- DATABASE LOCALE OFFLINE (IndexedDB) -->
+    <script src="https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/umd.js"></script>
+
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -41,7 +36,6 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* Animazioni personalizzate */
         @keyframes pulse-ring {
             0% { transform: scale(0.8); opacity: 0.5; }
             100% { transform: scale(1.3); opacity: 0; }
@@ -60,25 +54,20 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
+        // Sicurezza per Lucide Icons con React
         const Icon = ({ name, size = 24, className = "", strokeWidth = 2 }) => {
             const spanRef = useRef(null);
-            
             useEffect(() => {
                 if (spanRef.current) {
-                    // Inseriamo il tag <i> manualmente all'interno di uno span.
-                    // In questo modo React gestisce solo lo <span> in modo sicuro,
-                    // e Lucide può scambiare il contenuto interno senza mandare in crash React.
                     spanRef.current.innerHTML = `<i data-lucide="${name}" class="${className}" stroke-width="${strokeWidth}" width="${size}" height="${size}"></i>`;
                     lucide.createIcons({ root: spanRef.current });
                 }
             }, [name, className, strokeWidth, size]);
-            
             return <span ref={spanRef} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} />;
         };
 
-        // Icone base
         const MapPin = (p) => <Icon name="map-pin" {...p} />;
         const UserPlus = (p) => <Icon name="user-plus" {...p} />;
         const Search = (p) => <Icon name="search" {...p} />;
@@ -106,8 +95,50 @@
         const Zap = (p) => <Icon name="zap" {...p} />;
         const Mailbox = (p) => <Icon name="mail" {...p} />;
         const CheckCircle = (p) => <Icon name="check-circle" {...p} />;
+        const Database = (p) => <Icon name="database" {...p} />;
+        const HardDrive = (p) => <Icon name="hard-drive" {...p} />;
 
-        // Componente Visualizzatore Immagini (Zoom)
+        // Comprime l'immagine per salvare spazio nel database IndexedDB
+        const processImageFile = (file, callback) => {
+            if(!file) return;
+            const fDate = file.lastModified ? new Date(file.lastModified).toLocaleDateString() : new Date().toLocaleDateString();
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Massimo 800px per mantenere la lettura nitida ma salvare memoria
+                    const MAX_WIDTH = 800; 
+                    let scaleSize = 1;
+                    if (img.width > MAX_WIDTH) scaleSize = MAX_WIDTH / img.width;
+                    
+                    canvas.width = img.width * scaleSize; 
+                    canvas.height = img.height * scaleSize;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    // Qualità Jpeg al 70%
+                    callback(canvas.toDataURL('image/jpeg', 0.7), fDate);
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        const CustomConfirm = ({ message, onConfirm, onCancel }) => (
+            <div className="fixed inset-0 bg-slate-900/80 z-[500] flex items-center justify-center p-6 backdrop-blur-sm">
+                <div className="bg-white p-6 rounded-[2rem] w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200">
+                    <h3 className="text-xl font-black italic text-slate-800 uppercase mb-4 text-center">Sei sicuro?</h3>
+                    <p className="text-slate-500 font-bold text-center mb-6 leading-tight">{message}</p>
+                    <div className="flex gap-3">
+                        <button onClick={onCancel} className="flex-1 py-4 font-black text-slate-400 bg-slate-100 rounded-2xl uppercase active:scale-95 transition-transform text-sm">Annulla</button>
+                        <button onClick={onConfirm} className="flex-[1.5] py-4 bg-red-600 text-white rounded-2xl font-black uppercase shadow-lg active:scale-95 transition-transform text-sm">Conferma</button>
+                    </div>
+                </div>
+            </div>
+        );
+
         const ImageViewer = ({ imageObj, onClose }) => {
             const [scale, setScale] = useState(1);
             const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -152,78 +183,240 @@
             );
         };
 
-        const App = () => {
-            // Inizializzazione Dati con Migrazione automatica (Da V4 a V5 per le doppie foto)
-            const [data, setData] = useState(() => {
-                const v5 = localStorage.getItem('postino_data_v5');
-                if (v5) return JSON.parse(v5);
+        // IL MOTORE DEL DATABASE: Carica la foto dalla memoria IndexedDB SOLO quando è visibile
+        const DbPhoto = ({ zone, street, civico, type, onZoom, askConfirm }) => {
+            const [photoData, setPhotoData] = useState(null);
+            const [loading, setLoading] = useState(true);
 
-                const v4 = localStorage.getItem('postino_data_v4');
-                let parsed = v4 ? JSON.parse(v4) : { zones: { "ZONA DEFAULT": { streets: {} } } };
-                
-                // Miga i vecchi dati (singola foto) al nuovo sistema (Citofono + Cassette)
-                Object.values(parsed.zones).forEach(z => {
-                    if(!z.streets) z.streets = {};
-                    Object.values(z.streets).forEach(s => {
-                        if(!s.civici) s.civici = {};
-                        Object.values(s.civici).forEach(c => {
-                            if (c.photo) {
-                                c.photoCitofono = c.photo;
-                                c.dateCitofono = c.photoDate;
-                                delete c.photo;
-                                delete c.photoDate;
-                            }
-                        });
-                    });
+            // Generiamo un ID univoco per la foto nel database
+            const getPhotoId = () => `photo_${btoa(unescape(encodeURIComponent(`${zone}_${street}_${civico}_${type}`)))}`;
+
+            useEffect(() => {
+                let isMounted = true;
+                // Richiama la foto dal database IndexedDB
+                idbKeyval.get(getPhotoId()).then(val => {
+                    if(isMounted && val) setPhotoData(val);
+                    if(isMounted) setLoading(false);
+                }).catch(e => {
+                    console.error("Errore lettura DB", e);
+                    if(isMounted) setLoading(false);
                 });
-                return parsed;
-            });
+                return () => { isMounted = false; };
+            }, [zone, street, civico, type]);
 
-            // Stati UI
-            const [view, setView] = useState('list'); 
-            const [activeZone, setActiveZone] = useState(Object.keys(data.zones)[0] || "ZONA DEFAULT");
+            const handleUpload = (e) => {
+                const file = e.target.files[0];
+                if(!file) return;
+                setLoading(true);
+                processImageFile(file, async (base64, date) => {
+                    const newData = { photo: base64, date };
+                    setPhotoData(newData);
+                    // Salva la foto nel database IndexedDB
+                    await idbKeyval.set(getPhotoId(), newData);
+                    setLoading(false);
+                });
+            };
+
+            const handleRemove = (e) => {
+                e.stopPropagation();
+                askConfirm(`Vuoi rimuovere la foto ${type.toUpperCase()}?`, async () => {
+                    setLoading(true);
+                    setPhotoData(null);
+                    // Elimina dal database
+                    await idbKeyval.del(getPhotoId());
+                    setLoading(false);
+                });
+            };
+
+            const typeLabel = type === 'citofono' ? 'CITOFONO' : 'CASSETTE';
+            const IconComponent = type === 'citofono' ? ImageIcon : Mailbox;
+            const labelColor = type === 'citofono' ? 'text-white' : 'text-yellow-400';
+
+            if (loading) return <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 animate-pulse"><Database size={24} className="opacity-50 mb-1 animate-bounce" /><span className="text-[8px] font-black uppercase">Sync DB</span></div>;
+
+            return (
+                <div className="relative group w-full h-full">
+                    {photoData ? (
+                        <>
+                            <img src={photoData.photo} className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" alt={type} onClick={() => onZoom({ photo: photoData.photo, date: photoData.date, type: type })} />
+                            <div className={`absolute top-1 left-2 bg-black/60 px-2 py-0.5 rounded text-[8px] font-black ${labelColor} pointer-events-none shadow`}>{typeLabel}</div>
+                            <button onClick={handleRemove} className="absolute bottom-1 right-1 bg-red-500/90 text-white p-1.5 rounded-lg active:scale-90 shadow-xl"><Trash2 size={12} /></button>
+                        </>
+                    ) : (
+                        <label className="w-full h-full flex flex-col items-center justify-center text-slate-400 hover:bg-slate-200 transition-colors cursor-pointer active:bg-slate-300">
+                            <IconComponent size={24} className="mb-1 opacity-50" />
+                            <span className="text-[9px] font-black uppercase tracking-tight">+ Foto {typeLabel}</span>
+                            <input type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+                        </label>
+                    )}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [isDbReady, setIsDbReady] = useState(false);
+            const [data, setData] = useState({ zones: { "ZONA DEFAULT": { streets: {} } } });
+            
+            const [view, setView] = useState('loading'); 
+            const [activeZone, setActiveZone] = useState("ZONA DEFAULT");
             const [activeStreet, setActiveStreet] = useState(null);
+            
             const [sidebarOpen, setSidebarOpen] = useState(false);
             const [zoomedImage, setZoomedImage] = useState(null); 
-            
-            // Filtri
             const [searchTerm, setSearchTerm] = useState('');
             const [civicoFilter, setCivicoFilter] = useState('');
             const [nameFilter, setNameFilter] = useState('');
             const [reportStreetFilter, setReportStreetFilter] = useState('');
             const [reportCivicoFilter, setReportCivicoFilter] = useState('');
-
-            // Form Normale
+            const [notification, setNotification] = useState(null);
+            const [confirmDialog, setConfirmDialog] = useState(null);
+            
             const [formMode, setFormMode] = useState(null); 
             const [formState, setFormState] = useState({ name: '', status: 'residente', civico: '', posCassetta: '' });
-            
-            // Form Aggiunta Rapida Globale
             const [quickAddState, setQuickAddState] = useState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null });
-            
-            // NUOVO: Stato per l'inserimento "Solo Foto Veloce"
             const [quickPhotoState, setQuickPhotoState] = useState({ street: '', civico: '', type: 'citofono', photo: null });
             
-            const [notification, setNotification] = useState(null);
-            
-            // Stati Avanzati (Scan / Menu / Voce)
             const [showInputMenu, setShowInputMenu] = useState(false);
             const [isScanning, setIsScanning] = useState(false);
             const [scanProgress, setScanProgress] = useState(0);
             const [ocrData, setOcrData] = useState(null); 
             const [isListening, setIsListening] = useState(false);
-            
             const speechRecRef = useRef(null);
 
-            useEffect(() => {
-                localStorage.setItem('postino_data_v5', JSON.stringify(data));
-            }, [data]);
+            const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(null), 3500); };
+            const askConfirm = (msg, action) => setConfirmDialog({ message: msg, onConfirm: () => { action(); setConfirmDialog(null); } });
 
-            const notify = (msg) => {
-                setNotification(msg);
-                setTimeout(() => setNotification(null), 3500);
+            useEffect(() => {
+                const initDB = async () => {
+                    try {
+                        if (!window.idbKeyval) {
+                            setTimeout(initDB, 100);
+                            return;
+                        }
+
+                        // Leggi albero leggero da IndexedDB
+                        let mainData = await idbKeyval.get('postino_main_data');
+                        
+                        if (mainData) {
+                            setData(mainData);
+                            if(Object.keys(mainData.zones).length > 0) setActiveZone(Object.keys(mainData.zones)[0]);
+                        } else {
+                            // MIGRATORE: Prende i dati vecchi da localStorage (v5 o v4) e li scompatta in IndexedDB
+                            const localData = localStorage.getItem('postino_data_v5') || localStorage.getItem('postino_data_v4');
+                            if (localData) {
+                                const parsed = JSON.parse(localData);
+                                let fotoMigrate = 0;
+                                
+                                for (const z in parsed.zones) {
+                                    for (const s in parsed.zones[z].streets) {
+                                        for (const c in parsed.zones[z].streets[s].civici) {
+                                            const civ = parsed.zones[z].streets[s].civici[c];
+                                            
+                                            // Estrai foto vecchie, salvale in IndexedDB, cancella dal JSON
+                                            if(civ.photoCitofono || civ.photo) {
+                                                const pid = `photo_${btoa(unescape(encodeURIComponent(`${z}_${s}_${c}_citofono`)))}`;
+                                                await idbKeyval.set(pid, { photo: civ.photoCitofono || civ.photo, date: civ.dateCitofono || civ.photoDate || '' });
+                                                delete civ.photoCitofono; delete civ.dateCitofono; delete civ.photo; delete civ.photoDate;
+                                                fotoMigrate++;
+                                            }
+                                            if(civ.photoCassette) {
+                                                const pid = `photo_${btoa(unescape(encodeURIComponent(`${z}_${s}_${c}_cassette`)))}`;
+                                                await idbKeyval.set(pid, { photo: civ.photoCassette, date: civ.dateCassette || '' });
+                                                delete civ.photoCassette; delete civ.dateCassette;
+                                                fotoMigrate++;
+                                            }
+                                        }
+                                    }
+                                }
+                                setData(parsed);
+                                if(Object.keys(parsed.zones).length > 0) setActiveZone(Object.keys(parsed.zones)[0]);
+                                
+                                // Salva il nuovo albero alleggerito nel DB
+                                await idbKeyval.set('postino_main_data', parsed);
+                                
+                                // Libera la memoria vecchia se tutto è andato bene
+                                localStorage.removeItem('postino_data_v5');
+                                localStorage.removeItem('postino_data_v4');
+                                
+                                if(fotoMigrate > 0) notify(`🚀 Migrazione IndexedDB completata! Mappate ${fotoMigrate} foto nel nuovo sistema senza limiti.`);
+                            }
+                        }
+                        setIsDbReady(true);
+                        setView('list');
+                    } catch (e) {
+                        console.error("Errore DB:", e);
+                        notify("Errore avvio Database Locale");
+                    }
+                };
+                initDB();
+            }, []);
+
+            // AUTOSAVE: Salva i dati leggeri (nomi, vie) a ogni modifica (Debounced)
+            useEffect(() => {
+                if(!isDbReady) return;
+                const timer = setTimeout(() => {
+                    idbKeyval.set('postino_main_data', data).catch(e => console.error("Errore salvataggio autosave:", e));
+                }, 500); 
+                return () => clearTimeout(timer);
+            }, [data, isDbReady]);
+
+            // Funzione aiutante per salvare direttamente nel database
+            const saveDirectPhotoToDb = async (z, s, c, type, base64) => {
+                const pid = `photo_${btoa(unescape(encodeURIComponent(`${z}_${s}_${c}_${type}`)))}`;
+                await idbKeyval.set(pid, { photo: base64, date: new Date().toLocaleDateString() });
             };
 
-            // Funzioni Gestione Zone e Strade
+            const handleBackup = async () => {
+                try {
+                    notify("Preparazione backup in corso...");
+                    // Raccogli TUTTO il database (Dati albero + tutte le singole foto)
+                    const entries = await idbKeyval.entries();
+                    const exportData = Object.fromEntries(entries);
+                    
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData));
+                    const downloadAnchorNode = document.createElement('a');
+                    downloadAnchorNode.setAttribute("href", dataStr);
+                    downloadAnchorNode.setAttribute("download", `Postino_DB_Completo_${activeZone.replace(' ','_')}.json`);
+                    document.body.appendChild(downloadAnchorNode);
+                    downloadAnchorNode.click();
+                    downloadAnchorNode.remove();
+                    notify("Backup Completo salvato sul dispositivo.");
+                } catch(e) {
+                    notify("Errore durante il backup!");
+                }
+            };
+
+            const handleRestore = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                askConfirm("ATTENZIONE: Questo sovrascriverà tutti i dati e le foto presenti. Procedere?", () => {
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        try {
+                            const parsed = JSON.parse(event.target.result);
+                            if (parsed && parsed.postino_main_data) {
+                                // Pulisce vecchio DB
+                                await idbKeyval.clear();
+                                // Ripristina tutti i campi
+                                for(const [k, v] of Object.entries(parsed)) {
+                                    await idbKeyval.set(k, v);
+                                }
+                                setData(parsed.postino_main_data);
+                                const keys = Object.keys(parsed.postino_main_data.zones);
+                                if(keys.length > 0) setActiveZone(keys[0]);
+                                notify("Database ripristinato con successo!");
+                                setSidebarOpen(false);
+                                setView('list');
+                            } else {
+                                notify("File non valido o corrotto!");
+                            }
+                        } catch (error) { notify("Errore: Impossibile leggere il file."); }
+                    };
+                    reader.readAsText(file);
+                });
+                e.target.value = null;
+            };
+
             const addZone = (name) => {
                 const zName = name.trim().toUpperCase();
                 if (!zName || data.zones[zName]) return notify("Zona non valida o già presente");
@@ -232,38 +425,27 @@
             };
 
             const deleteZone = (zName) => {
-                if(!window.confirm(`Eliminare la ${zName}? Verranno persi tutti i dati al suo interno.`)) return;
-                setData(prev => {
-                    const newData = { ...prev };
-                    delete newData.zones[zName];
-                    const keys = Object.keys(newData.zones);
-                    if (keys.length > 0) setActiveZone(keys[0]);
-                    else { newData.zones = { "ZONA DEFAULT": { streets: {} } }; setActiveZone("ZONA DEFAULT"); }
-                    return newData;
+                askConfirm(`Eliminare la ${zName}? Verranno persi tutti i dati mappati.`, () => {
+                    setData(prev => {
+                        const newData = { ...prev };
+                        delete newData.zones[zName];
+                        const keys = Object.keys(newData.zones);
+                        if (keys.length > 0) setActiveZone(keys[0]);
+                        else { newData.zones = { "ZONA DEFAULT": { streets: {} } }; setActiveZone("ZONA DEFAULT"); }
+                        return newData;
+                    });
+                    setActiveStreet(null); setSidebarOpen(false); setView('list');
                 });
-                setActiveStreet(null); setSidebarOpen(false); setView('list');
             };
 
             const addStreet = (streetName) => {
                 const sName = streetName.trim().toUpperCase();
                 if (!sName) return;
                 if (data.zones[activeZone].streets[sName]) return notify("Via già presente in questa zona");
-                
-                setData(prev => ({
-                    ...prev,
-                    zones: {
-                    ...prev.zones,
-                    [activeZone]: {
-                        ...prev.zones[activeZone],
-                        streets: { ...prev.zones[activeZone].streets, [sName]: { civici: {} } }
-                    }
-                    }
-                }));
-                setView('list');
-                notify("Via aggiunta!");
+                setData(prev => ({ ...prev, zones: { ...prev.zones, [activeZone]: { ...prev.zones[activeZone], streets: { ...prev.zones[activeZone].streets, [sName]: { civici: {} } } } } }));
+                setView('list'); notify("Via aggiunta!");
             };
 
-            // Salvataggio Normale
             const handleSaveResident = () => {
                 const { name, status, civico, posCassetta } = formState;
                 if (!name || !civico) return notify("Compila Nome e Civico");
@@ -271,186 +453,100 @@
                 setData(prev => {
                     const newData = { ...prev };
                     const street = newData.zones[activeZone].streets[activeStreet];
-                    
-                    if (!street.civici[civico]) street.civici[civico] = { residents: [], photoCitofono: null, photoCassette: null };
+                    if (!street.civici[civico]) street.civici[civico] = { residents: [] };
 
                     if (formMode.type === 'edit') {
                         const idx = street.civici[formMode.civico].residents.findIndex(r => r.id === formMode.data.id);
                         if (formMode.civico !== civico) {
                             street.civici[formMode.civico].residents.splice(idx, 1);
-                            if (!street.civici[civico]) street.civici[civico] = { residents: [], photoCitofono: null, photoCassette: null };
+                            if (!street.civici[civico]) street.civici[civico] = { residents: [] };
                             street.civici[civico].residents.push({ ...formMode.data, name: name.toUpperCase(), status, posCassetta });
                         } else {
                             street.civici[civico].residents[idx] = { ...formMode.data, name: name.toUpperCase(), status, posCassetta };
                         }
                     } else {
-                        street.civici[civico].residents.push({
-                            id: Date.now(), name: name.toUpperCase(), status, posCassetta: posCassetta || '', date: new Date().toLocaleDateString()
-                        });
+                        street.civici[civico].residents.push({ id: Date.now(), name: name.toUpperCase(), status, posCassetta: posCassetta || '', date: new Date().toLocaleDateString() });
                     }
                     return newData;
                 });
-
-                setFormMode(null);
-                setView('street-detail');
-                notify("Salvato!");
+                setFormMode(null); setView('street-detail'); notify("Dati anagrafici salvati!");
             };
 
-            // Inserimento Rapido Globale
             const handleQuickAddSave = () => {
                 const sName = quickAddState.street.trim().toUpperCase();
                 const cName = quickAddState.civico.trim().toUpperCase();
                 const rName = quickAddState.name.trim().toUpperCase();
 
                 if(!sName || !cName || !rName) return notify("Compila Via, Civico e Nome!");
-                
-                if(!data.zones[activeZone].streets[sName]) {
-                    return notify(`ERRORE: La via "${sName}" non esiste in ${activeZone}. Prima aggiungila!`);
-                }
+                if(!data.zones[activeZone].streets[sName]) return notify(`ERRORE: La via "${sName}" non esiste in ${activeZone}. Prima aggiungila!`);
 
                 setData(prev => {
                     const newData = { ...prev };
                     const streetObj = newData.zones[activeZone].streets[sName];
-                    
-                    if (!streetObj.civici[cName]) {
-                        streetObj.civici[cName] = { residents: [], photoCitofono: null, dateCitofono: null, photoCassette: null, dateCassette: null };
-                    }
-
-                    streetObj.civici[cName].residents.push({
-                        id: Date.now(), name: rName, status: quickAddState.status, posCassetta: '', date: new Date().toLocaleDateString()
-                    });
-
-                    // Se è stata caricata una foto nel quick add, la salva come Citofono
-                    if(quickAddState.photoCitofono) {
-                        streetObj.civici[cName].photoCitofono = quickAddState.photoCitofono;
-                        streetObj.civici[cName].dateCitofono = new Date().toLocaleDateString();
-                    }
-
+                    if (!streetObj.civici[cName]) streetObj.civici[cName] = { residents: [] };
+                    streetObj.civici[cName].residents.push({ id: Date.now(), name: rName, status: quickAddState.status, posCassetta: '', date: new Date().toLocaleDateString() });
                     return newData;
                 });
 
+                if(quickAddState.photoCitofono) saveDirectPhotoToDb(activeZone, sName, cName, 'citofono', quickAddState.photoCitofono);
+                
                 notify(`Aggiunto a ${sName}, ${cName}!`);
                 setQuickAddState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null });
-                setView('list'); // Torna alla dashboard
+                setView('list'); 
             };
 
-            // Inserimento Solo Foto
             const handleQuickPhotoSave = () => {
                 const sName = quickPhotoState.street.trim().toUpperCase();
                 const cName = quickPhotoState.civico.trim().toUpperCase();
 
                 if(!sName || !cName || !quickPhotoState.photo) return notify("Compila Via, Civico e acquisisci la Foto!");
-                
-                if(!data.zones[activeZone].streets[sName]) {
-                    return notify(`ERRORE: La via "${sName}" non esiste in ${activeZone}. Prima aggiungila!`);
-                }
+                if(!data.zones[activeZone].streets[sName]) return notify(`ERRORE: La via "${sName}" non esiste in ${activeZone}. Prima aggiungila!`);
 
                 setData(prev => {
                     const newData = { ...prev };
                     const streetObj = newData.zones[activeZone].streets[sName];
-                    
-                    if (!streetObj.civici[cName]) {
-                        streetObj.civici[cName] = { residents: [], photoCitofono: null, dateCitofono: null, photoCassette: null, dateCassette: null };
-                    }
-
-                    if(quickPhotoState.type === 'citofono') {
-                        streetObj.civici[cName].photoCitofono = quickPhotoState.photo;
-                        streetObj.civici[cName].dateCitofono = new Date().toLocaleDateString();
-                    } else {
-                        streetObj.civici[cName].photoCassette = quickPhotoState.photo;
-                        streetObj.civici[cName].dateCassette = new Date().toLocaleDateString();
-                    }
-
+                    if (!streetObj.civici[cName]) streetObj.civici[cName] = { residents: [] }; // Inizializza albero se non esiste
                     return newData;
                 });
+                
+                saveDirectPhotoToDb(activeZone, sName, cName, quickPhotoState.type, quickPhotoState.photo);
 
-                notify(`Foto aggiunta a ${sName}, ${cName}!`);
+                notify(`Foto salvata offline in ${sName}, ${cName}!`);
                 setQuickPhotoState({ street: '', civico: '', type: 'citofono', photo: null });
                 setView('list'); 
             };
 
-            // Gestione Foto (Doppia foto: type = 'citofono' o 'cassette')
-            const updateCivicoPhoto = (civico, type, photo, photoDate) => {
-                setData(prev => {
-                    const newData = { ...prev };
-                    if(type === 'citofono') {
-                        newData.zones[activeZone].streets[activeStreet].civici[civico].photoCitofono = photo;
-                        newData.zones[activeZone].streets[activeStreet].civici[civico].dateCitofono = photoDate;
-                    } else {
-                        newData.zones[activeZone].streets[activeStreet].civici[civico].photoCassette = photo;
-                        newData.zones[activeZone].streets[activeStreet].civici[civico].dateCassette = photoDate;
-                    }
-                    return newData;
-                });
-            };
-
-            // Utilità per ridimensionare immagini prima di salvarle (Performance)
-            const processImageFile = (file, callback) => {
-                if(!file) return;
-                const fDate = file.lastModified ? new Date(file.lastModified).toLocaleDateString() : new Date().toLocaleDateString();
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        const MAX_WIDTH = 800; const scaleSize = MAX_WIDTH / img.width;
-                        canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        callback(canvas.toDataURL('image/jpeg', 0.6), fDate);
-                    };
-                    img.src = reader.result;
-                };
-                reader.readAsDataURL(file);
-            };
-
             const deleteResident = (civico, id) => {
-                if(!window.confirm("Eliminare definitivamente?")) return;
-                setData(prev => {
-                    const newData = { ...prev };
-                    const civ = newData.zones[activeZone].streets[activeStreet].civici[civico];
-                    civ.residents = civ.residents.filter(r => r.id !== id);
-                    return newData;
+                askConfirm("Eliminare definitivamente il nominativo?", () => {
+                    setData(prev => {
+                        const newData = { ...prev };
+                        newData.zones[activeZone].streets[activeStreet].civici[civico].residents = newData.zones[activeZone].streets[activeStreet].civici[civico].residents.filter(r => r.id !== id);
+                        return newData;
+                    });
                 });
             };
 
-            // ==========================================
-            // LOGICA AVANZATA MANTENUTA (OCR & Voce)
-            // ==========================================
             const handleOfflineScan = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 setShowInputMenu(false); setIsScanning(true); setScanProgress(0);
-
                 try {
-                    const result = await Tesseract.recognize(file, 'ita', {
-                        logger: m => { if (m.status === 'recognizing text') setScanProgress(Math.round(m.progress * 100)); }
-                    });
-                    
+                    const result = await Tesseract.recognize(file, 'ita', { logger: m => { if (m.status === 'recognizing text') setScanProgress(Math.round(m.progress * 100)); } });
                     const wordsArray = result.data.text.replace(/\n/g, ' ').split(/\s+/).filter(w => w.trim().length > 0);
                     const cleanTags = wordsArray.map(w => w.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toUpperCase())
-                        .filter(w => {
-                            if (/\d/.test(w)) return true;
-                            if (w.length <= 2) return ['DE', 'DI', 'DA', 'LA', 'LO', 'LI', 'DEL', 'DAL'].includes(w);
-                            return w.length > 2; 
-                        });
-
+                        .filter(w => { if (/\d/.test(w)) return true; if (w.length <= 2) return ['DE', 'DI', 'DA', 'LA', 'LO', 'LI', 'DEL', 'DAL'].includes(w); return w.length > 2; });
                     setOcrData({ tags: cleanTags, activeField: 'name', name: '', civico: '' });
-                    setView('ocr-select');
-                    notify("Tocca i tag per comporre la scheda.");
-                } catch (error) { notify("Scansione fallita."); } 
-                finally { setIsScanning(false); e.target.value = null; }
+                    setView('ocr-select'); notify("Tocca i tag per comporre la scheda.");
+                } catch (error) { notify("Scansione fallita."); } finally { setIsScanning(false); e.target.value = null; }
             };
 
             const startVoiceDictation = () => {
                 setShowInputMenu(false);
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (!SpeechRecognition) return notify("Dettatura non supportata qui.");
-
                 const recognition = new SpeechRecognition();
                 recognition.lang = 'it-IT'; recognition.interimResults = false; recognition.maxAlternatives = 1;
                 speechRecRef.current = recognition;
-
                 recognition.onstart = () => setIsListening(true);
                 recognition.onresult = (event) => parseVoiceTranscript(event.results[0][0].transcript.toLowerCase());
                 recognition.onerror = () => { notify("Errore microfono."); setIsListening(false); };
@@ -468,8 +564,7 @@
                     if (/\d/.test(lastWord) || lastWord.length === 1) {
                         civico = lastWord;
                         if (words.length > 1 && /\d/.test(words[words.length - 2])) {
-                            civico = words[words.length - 2] + words[words.length - 1];
-                            name = words.slice(0, -2).join(' ');
+                            civico = words[words.length - 2] + words[words.length - 1]; name = words.slice(0, -2).join(' ');
                         } else name = words.slice(0, -1).join(' ');
                     } else name = text;
                 }
@@ -478,15 +573,8 @@
             };
             const stopVoiceDictation = () => { if(speechRecRef.current) speechRecRef.current.stop(); setIsListening(false); };
 
-            // ==========================================
-            // MEMOIZZAZIONI DATI PER LA UI
-            // ==========================================
             const streetsInActiveZone = Object.keys(data.zones[activeZone]?.streets || {}).sort();
-            
-            const filteredStreets = useMemo(() => {
-                return streetsInActiveZone.filter(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
-            }, [streetsInActiveZone, searchTerm]);
-
+            const filteredStreets = useMemo(() => streetsInActiveZone.filter(s => s.toLowerCase().includes(searchTerm.toLowerCase())), [streetsInActiveZone, searchTerm]);
             const civiciToDisplay = useMemo(() => {
                 if (!activeStreet) return [];
                 const street = data.zones[activeZone]?.streets?.[activeStreet];
@@ -504,10 +592,9 @@
             const reportData = useMemo(() => {
                 if (!data.zones[activeZone]) return [];
                 const result = [];
-                const streets = data.zones[activeZone].streets;
-                Object.keys(streets).sort().forEach(streetName => {
+                Object.keys(data.zones[activeZone].streets).sort().forEach(streetName => {
                     if (reportStreetFilter && !streetName.toLowerCase().includes(reportStreetFilter.toLowerCase())) return;
-                    const civici = streets[streetName].civici;
+                    const civici = data.zones[activeZone].streets[streetName].civici;
                     const streetMatches = [];
                     Object.keys(civici).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach(cNum => {
                         if (reportCivicoFilter && !cNum.toUpperCase().includes(reportCivicoFilter.toUpperCase())) return;
@@ -519,33 +606,40 @@
                 return result;
             }, [data, activeZone, reportStreetFilter, reportCivicoFilter]);
 
-            const getStatusColorConfig = (status) => {
-                const config = {
-                    residente: { color: 'bg-green-600', text: 'text-white', label: 'Residente' },
-                    sconosciuto: { color: 'bg-red-600', text: 'text-white', label: 'Sconosciuto' },
-                    trasferito: { color: 'bg-orange-500', text: 'text-white', label: 'Trasferito' },
-                    irreperibile: { color: 'bg-purple-600', text: 'text-white', label: 'Irreperibile' },
-                    deceduto: { color: 'bg-slate-700', text: 'text-white', label: 'Deceduto' }
-                };
-                return config[status] || { color: 'bg-slate-200', text: 'text-slate-800', label: status };
-            };
-
             const StatusButton = ({ status, current, onClick }) => {
+                const getStatusColorConfig = (st) => {
+                    const cfg = { residente: { c: 'bg-green-600', t: 'text-white', l: 'Residente' }, sconosciuto: { c: 'bg-red-600', t: 'text-white', l: 'Sconosciuto' }, trasferito: { c: 'bg-orange-500', t: 'text-white', l: 'Trasferito' }, irreperibile: { c: 'bg-purple-600', t: 'text-white', l: 'Irreperibile' }, deceduto: { c: 'bg-slate-700', t: 'text-white', l: 'Deceduto' }};
+                    return cfg[st] || { c: 'bg-slate-200', t: 'text-slate-800', l: st };
+                };
                 const config = getStatusColorConfig(status);
                 const active = current === status;
                 return (
-                    <button onClick={() => onClick(status)}
-                        className={`p-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm border-2
-                            ${active ? `${config.color} border-transparent ${config.text} scale-105` : 'bg-white border-slate-100 text-slate-400'}`}>
-                        {config.label}
+                    <button onClick={() => onClick(status)} className={`p-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-sm border-2 ${active ? `${config.c} border-transparent ${config.t} scale-105` : 'bg-white border-slate-100 text-slate-400'}`}>
+                        {config.l}
                     </button>
                 );
             };
 
+            if (view === 'loading') {
+                return (
+                    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white space-y-6">
+                        <div className="relative w-32 h-32 flex items-center justify-center bg-white/10 rounded-[3rem] animate-pulse">
+                            <Database size={64} className="text-blue-400 absolute" />
+                            <HardDrive size={32} className="text-white mt-12" />
+                        </div>
+                        <div className="text-center">
+                            <h1 className="text-2xl font-black italic uppercase tracking-tighter text-yellow-400 mb-1">Postino Smart DB</h1>
+                            <p className="text-sm font-bold text-slate-400">Avvio Database Locale Veloce...</p>
+                        </div>
+                    </div>
+                )
+            }
+
             return (
                 <div className="min-h-screen pb-24">
                     
-                    {/* --- SCHERMATE IN SOVRAPPOSIZIONE --- */}
+                    {confirmDialog && <CustomConfirm message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
+                    
                     {isListening && (
                         <div className="fixed inset-0 bg-slate-900/95 z-[300] flex flex-col items-center justify-center p-6 touch-none">
                             <div className="relative w-28 h-28 flex items-center justify-center mic-ring mb-8 bg-red-500/20 rounded-full"><Mic size={48} className="text-red-500" /></div>
@@ -565,7 +659,7 @@
 
                     {zoomedImage && <ImageViewer imageObj={zoomedImage} onClose={() => setZoomedImage(null)} />}
 
-                    {/* MENU SCELTA METODO INSERIMENTO SULLA VIA */}
+                    {/* MENU INPUT MULTIPLO */}
                     {showInputMenu && (
                         <div className="fixed inset-0 bg-black/60 z-[200] flex items-end justify-center backdrop-blur-sm" onClick={() => setShowInputMenu(false)}>
                             <div className="bg-white w-full max-w-2xl rounded-t-[2.5rem] p-6 pb-12 animate-in slide-in-from-bottom-full duration-300" onClick={e => e.stopPropagation()}>
@@ -574,17 +668,11 @@
                                 <div className="space-y-4">
                                     <button onClick={startVoiceDictation} className="w-full bg-red-50 p-4 rounded-3xl flex items-center gap-4 active:scale-95 transition-all border border-red-100 shadow-sm">
                                         <div className="bg-red-500 text-white p-4 rounded-2xl shadow-inner"><Mic size={28} /></div>
-                                        <div className="text-left flex-1">
-                                            <p className="font-black text-slate-800 uppercase text-lg leading-tight">Dettatura Vocale</p>
-                                            <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Veloce. Es: "Mario rossi civico 1"</p>
-                                        </div>
+                                        <div className="text-left flex-1"><p className="font-black text-slate-800 uppercase text-lg leading-tight">Dettatura Vocale</p><p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Veloce. Es: "Mario rossi civico 1"</p></div>
                                     </button>
                                     <label className="w-full bg-slate-50 p-4 rounded-3xl flex items-center gap-4 active:scale-95 transition-all border border-slate-200 shadow-sm cursor-pointer">
                                         <div className="bg-slate-500 text-white p-4 rounded-2xl shadow-inner"><WifiOff size={28} /></div>
-                                        <div className="text-left flex-1">
-                                            <p className="font-black text-slate-800 uppercase text-lg leading-tight">Scansione Tag (Offline)</p>
-                                            <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Scegli file o scatta foto</p>
-                                        </div>
+                                        <div className="text-left flex-1"><p className="font-black text-slate-800 uppercase text-lg leading-tight">Scansione Tag (Offline)</p><p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Scegli file o scatta foto</p></div>
                                         <input type="file" accept="image/*" className="hidden" onChange={handleOfflineScan} />
                                     </label>
                                 </div>
@@ -592,7 +680,7 @@
                         </div>
                     )}
 
-                    {/* --- SIDEBAR MENU (ZONE & BACKUP) --- */}
+                    {}
                     {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-[100] transition-opacity" onClick={() => setSidebarOpen(false)} />}
                     <div className={`fixed top-0 left-0 h-full w-72 bg-slate-900 text-white z-[101] transform transition-transform shadow-2xl flex flex-col ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                         <div className="p-6 flex-1 overflow-y-auto">
@@ -603,77 +691,51 @@
                             <div className="space-y-2">
                                 {Object.keys(data.zones).sort().map(z => (
                                     <div key={z} className="flex items-center gap-2">
-                                        <button onClick={() => { setActiveZone(z); setActiveStreet(null); setView('list'); setSidebarOpen(false); }}
-                                            className={`flex-1 text-left p-4 rounded-xl font-bold flex justify-between items-center transition-colors ${activeZone === z ? 'bg-yellow-400 text-black' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}>
+                                        <button onClick={() => { setActiveZone(z); setActiveStreet(null); setView('list'); setSidebarOpen(false); }} className={`flex-1 text-left p-4 rounded-xl font-bold flex justify-between items-center transition-colors ${activeZone === z ? 'bg-yellow-400 text-black' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}>
                                             {z} <ChevronRight size={16} />
                                         </button>
                                         <button onClick={() => deleteZone(z)} className="p-4 text-slate-500 hover:text-red-400 rounded-xl bg-white/5"><Trash2 size={16} /></button>
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => { const name = prompt("Nome Nuova Zona (es. ZONA C o 15):"); if(name) addZone(name); }} className="w-full mt-8 p-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 font-bold hover:text-white transition-colors">
-                                + AGGIUNGI ZONA
-                            </button>
-
-                            <div className="mt-8 grid grid-cols-2 gap-2 border-t border-slate-800 pt-8">
-                                <button onClick={() => {
-                                        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
-                                        const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", `Postino_Backup_${activeZone.replace(' ','_')}.json`); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); notify("Backup salvato");
-                                    }} className="p-4 bg-slate-800 rounded-xl text-slate-300 font-bold hover:text-white transition-colors flex flex-col items-center justify-center gap-1">
-                                    <Save size={20} /> <span className="text-[10px]">SALVA</span>
+                            <button onClick={() => { const name = prompt("Nome Nuova Zona (es. ZONA C o 15):"); if(name) addZone(name); }} className="w-full mt-8 p-4 border-2 border-dashed border-slate-700 rounded-xl text-slate-500 font-bold hover:text-white transition-colors">+ AGGIUNGI ZONA</button>
+                            
+                            <div className="mt-8 border-t border-slate-800 pt-8 text-center text-slate-500 text-[10px] font-bold">
+                                I TUOI DATI SONO SALVATI OFFLINE NEL DB.<br/>Nessun limite di memoria o foto!
+                            </div>
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                <button onClick={handleBackup} className="p-4 bg-slate-800 rounded-xl text-slate-300 font-bold hover:text-white transition-colors flex flex-col items-center justify-center gap-1">
+                                    <Save size={20} /> <span className="text-[10px]">SALVA DB</span>
                                 </button>
                                 <label className="p-4 bg-slate-800 rounded-xl text-slate-300 font-bold hover:text-white transition-colors flex flex-col items-center justify-center gap-1 cursor-pointer">
-                                    <Upload size={20} /> <span className="text-[10px]">CARICA</span>
-                                    <input type="file" accept=".json" className="hidden" onChange={(e) => {
-                                            const file = e.target.files[0]; if (!file) return;
-                                            if (!window.confirm("ATTENZIONE: Verranno cancellati tutti i dati. Procedere?")) { e.target.value = null; return; }
-                                            const reader = new FileReader();
-                                            reader.onload = (event) => {
-                                                try {
-                                                    const parsed = JSON.parse(event.target.result);
-                                                    if (parsed && parsed.zones) { setData(parsed); const keys = Object.keys(parsed.zones); if(keys.length > 0) setActiveZone(keys[0]); notify("Backup caricato!"); setSidebarOpen(false); } 
-                                                    else notify("File non valido!");
-                                                } catch (error) { notify("Errore: file corrotto."); } e.target.value = null;
-                                            }; reader.readAsText(file);
-                                        }} />
+                                    <Upload size={20} /> <span className="text-[10px]">CARICA DB</span>
+                                    <input type="file" accept=".json" className="hidden" onChange={handleRestore} />
                                 </label>
                             </div>
                         </div>
                     </div>
 
-                    {/* --- HEADER SUPERIORE --- */}
+                    {}
                     <header className="bg-slate-900 text-white p-4 sticky top-0 z-50 shadow-md">
                         <div className="flex justify-between items-center max-w-2xl mx-auto">
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setSidebarOpen(true)} className="p-1 hover:bg-white/10 rounded-lg text-white"><Menu /></button>
                                 {view !== 'list' && view !== 'report' ? (
-                                    <button onClick={() => { 
-                                        if (view === 'form' || view === 'ocr-select') { setView('street-detail'); setOcrData(null); } 
-                                        else { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); }
-                                    }} className="p-1 text-white flex items-center gap-1 bg-slate-800 rounded-lg pr-3"><ArrowLeft /> <span className="text-xs font-bold">Indietro</span></button>
+                                    <button onClick={() => { if (view === 'form' || view === 'ocr-select') { setView('street-detail'); setOcrData(null); } else { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); } }} className="p-1 text-white flex items-center gap-1 bg-slate-800 rounded-lg pr-3"><ArrowLeft /> <span className="text-xs font-bold">Indietro</span></button>
                                 ) : (
-                                    <div>
-                                        <h1 className="text-sm font-black text-yellow-400 uppercase leading-none tracking-tighter">POSTMAN APP</h1>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">{activeZone}</p>
-                                    </div>
+                                    <div><h1 className="text-sm font-black text-yellow-400 uppercase leading-none tracking-tighter">POSTMAN APP</h1><p className="text-[10px] font-bold text-slate-400 uppercase">{activeZone}</p></div>
                                 )}
                             </div>
                             <div className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> v5.5
+                                <Database size={12} className="text-blue-400" /> OFFLINE DB v7
                             </div>
                         </div>
                     </header>
 
                     <main className="max-w-2xl mx-auto p-4">
-                        {/* NOTIFICHE FLOATING */}
-                        {notification && (
-                            <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-black shadow-2xl z-[400] text-sm animate-bounce whitespace-nowrap">
-                                {notification}
-                            </div>
-                        )}
-
+                        
                         {/* ==================================================== */}
-                        {/* VISTA: INSERIMENTO RAPIDO GLOBALE (Dalla Dashboard) */}
+                        {/* VISTA: INSERIMENTO RAPIDO GLOBALE                    */}
                         {/* ==================================================== */}
                         {view === 'quick-add' && (
                             <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-10 duration-300">
@@ -685,37 +747,23 @@
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Via (Esistente)</label>
                                         <input type="text" list="streets-list" className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black border-none ring-1 ring-slate-200 uppercase" placeholder="INIZIA A SCRIVERE..." value={quickAddState.street} onChange={(e) => setQuickAddState({...quickAddState, street: e.target.value.toUpperCase()})} />
                                         <MapPin className="absolute left-3 top-10 text-slate-400 pointer-events-none" size={18} />
-                                        <datalist id="streets-list">
-                                            {streetsInActiveZone.map(s => <option key={s} value={s} />)}
-                                        </datalist>
+                                        <datalist id="streets-list">{streetsInActiveZone.map(s => <option key={s} value={s} />)}</datalist>
                                     </div>
-
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es. 12, 14)</label>
                                             <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" value={quickAddState.civico} onChange={(e) => setQuickAddState({...quickAddState, civico: e.target.value.toUpperCase()})} />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Foto Citofono (Opz)</label>
-                                            <label className={`w-full p-3 h-[60px] flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed cursor-pointer transition-colors ${quickAddState.photoCitofono ? 'bg-green-50 border-green-400 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}>
-                                                {quickAddState.photoCitofono ? <><CheckCircle size={18} /><span className="font-bold text-xs uppercase">Caricata</span></> : <><Camera size={18} /><span className="font-bold text-xs uppercase">Scatta</span></>}
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Foto DB Locale</label>
+                                            <label className={`w-full p-3 h-[60px] flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed cursor-pointer transition-colors ${quickAddState.photoCitofono ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}>
+                                                {quickAddState.photoCitofono ? <><CheckCircle size={18} /><span className="font-bold text-xs uppercase">Caricata</span></> : <><Database size={18} /><span className="font-bold text-xs uppercase">Scatta</span></>}
                                                 <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64) => setQuickAddState({...quickAddState, photoCitofono: base64}))} />
                                             </label>
                                         </div>
                                     </div>
-                                    
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome/Cognome</label>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200" placeholder="ROSSI MARIO" value={quickAddState.name} onChange={(e) => setQuickAddState({...quickAddState, name: e.target.value.toUpperCase()})} />
-                                    </div>
-                                    
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">Stato</label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {['sconosciuto', 'trasferito', 'irreperibile'].map(st => <StatusButton key={st} status={st} current={quickAddState.status} onClick={(s) => setQuickAddState({...quickAddState, status: s})} />)}
-                                        </div>
-                                    </div>
-
+                                    <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome/Cognome</label><input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200" placeholder="ROSSI MARIO" value={quickAddState.name} onChange={(e) => setQuickAddState({...quickAddState, name: e.target.value.toUpperCase()})} /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">Stato</label><div className="grid grid-cols-3 gap-2">{['sconosciuto', 'trasferito', 'irreperibile'].map(st => <StatusButton key={st} status={st} current={quickAddState.status} onClick={(s) => setQuickAddState({...quickAddState, status: s})} />)}</div></div>
                                     <div className="flex gap-4 pt-4 border-t border-slate-100">
                                         <button onClick={() => setView('list')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
                                         <button onClick={handleQuickAddSave} className="flex-[2] py-4 bg-yellow-400 text-black rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform flex items-center justify-center gap-2"><Zap size={18}/> Salva in Strada</button>
@@ -725,28 +773,22 @@
                         )}
 
                         {/* ==================================================== */}
-                        {/* VISTA: INSERIMENTO SOLO FOTO VELOCE                  */}
+                        {/* VISTA: INSERIMENTO SOLO FOTO VELOCE (OFFLINE DB)     */}
                         {/* ==================================================== */}
+                        {}
                         {view === 'quick-photo' && (
                             <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-10 duration-300">
-                                <h2 className="text-2xl font-black italic uppercase text-slate-900 mb-2 flex items-center gap-2"><Camera className="text-indigo-500"/> Solo Foto</h2>
-                                <p className="text-xs text-slate-500 font-bold mb-6">Mappa rapidamente un citofono o cassetta in <span className="text-blue-600">{activeZone}</span> senza inserire nomi.</p>
+                                <h2 className="text-2xl font-black italic uppercase text-slate-900 mb-2 flex items-center gap-2"><Database className="text-indigo-500"/> DB Foto Veloce</h2>
+                                <p className="text-xs text-slate-500 font-bold mb-6">Fotografa citofoni o cassette e salvale istantaneamente nel Database di <span className="text-blue-600">{activeZone}</span>.</p>
                                 
                                 <div className="space-y-5">
                                     <div className="relative">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome Via (Esistente)</label>
                                         <input type="text" list="streets-list-photo" className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black border-none ring-1 ring-slate-200 uppercase" placeholder="INIZIA A SCRIVERE..." value={quickPhotoState.street} onChange={(e) => setQuickPhotoState({...quickPhotoState, street: e.target.value.toUpperCase()})} />
                                         <MapPin className="absolute left-3 top-10 text-slate-400 pointer-events-none" size={18} />
-                                        <datalist id="streets-list-photo">
-                                            {streetsInActiveZone.map(s => <option key={s} value={s} />)}
-                                        </datalist>
+                                        <datalist id="streets-list-photo">{streetsInActiveZone.map(s => <option key={s} value={s} />)}</datalist>
                                     </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es. 12, 14)</label>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" value={quickPhotoState.civico} onChange={(e) => setQuickPhotoState({...quickPhotoState, civico: e.target.value.toUpperCase()})} />
-                                    </div>
-
+                                    <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es. 12, 14)</label><input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" value={quickPhotoState.civico} onChange={(e) => setQuickPhotoState({...quickPhotoState, civico: e.target.value.toUpperCase()})} /></div>
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">Tipo di Foto</label>
                                         <div className="grid grid-cols-2 gap-2">
@@ -754,111 +796,56 @@
                                             <button onClick={() => setQuickPhotoState({...quickPhotoState, type: 'cassette'})} className={`p-3 rounded-xl font-black text-xs uppercase transition-all shadow-sm border-2 ${quickPhotoState.type === 'cassette' ? 'bg-yellow-500 border-transparent text-white scale-105' : 'bg-white border-slate-100 text-slate-400'}`}>Cassette</button>
                                         </div>
                                     </div>
-
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Scatta o Carica</label>
-                                        <label className={`w-full p-6 h-[120px] flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed cursor-pointer transition-colors ${quickPhotoState.photo ? 'bg-green-50 border-green-400 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}>
+                                        <label className={`w-full p-6 h-[120px] flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed cursor-pointer transition-colors ${quickPhotoState.photo ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100'}`}>
                                             {quickPhotoState.photo ? (
-                                                <>
-                                                    <CheckCircle size={32} />
-                                                    <span className="font-black text-sm uppercase">Foto Acquisita!</span>
-                                                    <span className="text-[10px] uppercase font-bold text-green-600/70">Tocca per rifare</span>
-                                                </>
+                                                <><CheckCircle size={32} /><span className="font-black text-sm uppercase">Salvataggio Pronto!</span><span className="text-[10px] uppercase font-bold text-blue-600/70">Tocca per rifare</span></>
                                             ) : (
-                                                <>
-                                                    <Camera size={32} />
-                                                    <span className="font-black text-sm uppercase">Acquisisci Immagine</span>
-                                                    <span className="text-[10px] uppercase font-bold text-slate-400">Si aprirà fotocamera o galleria</span>
-                                                </>
+                                                <><Camera size={32} /><span className="font-black text-sm uppercase">Acquisisci Immagine</span><span className="text-[10px] uppercase font-bold text-slate-400">Fotocamera o galleria</span></>
                                             )}
                                             <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64) => setQuickPhotoState({...quickPhotoState, photo: base64}))} />
                                         </label>
                                     </div>
-
                                     <div className="flex gap-4 pt-4 border-t border-slate-100">
                                         <button onClick={() => setView('list')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
-                                        <button onClick={handleQuickPhotoSave} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform flex items-center justify-center gap-2"><Camera size={18}/> Salva Foto</button>
+                                        <button onClick={handleQuickPhotoSave} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform flex items-center justify-center gap-2"><Database size={18}/> Salva nel DB</button>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* VISTA: OCR SELECT */}
+                        {/* OCR E REPORT VISTE (Mantenute compatte) */}
                         {view === 'ocr-select' && ocrData && (
                             <div className="space-y-6 animate-in fade-in duration-300">
-                                <div>
-                                    <h2 className="text-3xl font-black italic uppercase leading-tight text-slate-800">Scansione OK</h2>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tocca le parole per riempire i campi</p>
-                                </div>
+                                <div><h2 className="text-3xl font-black italic uppercase leading-tight text-slate-800">Scansione OK</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tocca le parole per riempire i campi</p></div>
                                 <div className="space-y-4">
                                     <div onClick={() => setOcrData({...ocrData, activeField: 'name'})} className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${ocrData.activeField === 'name' ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/20' : 'border-slate-200 bg-white'}`}>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'name' ? 'text-blue-600' : 'text-slate-400'}`}>1. Componi Nome</span>
-                                            {ocrData.name && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, name: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}
-                                        </div>
+                                        <div className="flex justify-between items-center mb-1"><span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'name' ? 'text-blue-600' : 'text-slate-400'}`}>1. Componi Nome</span>{ocrData.name && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, name: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}</div>
                                         <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">{ocrData.name || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}</div>
                                     </div>
                                     <div onClick={() => setOcrData({...ocrData, activeField: 'civico'})} className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${ocrData.activeField === 'civico' ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/20' : 'border-slate-200 bg-white'}`}>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'civico' ? 'text-blue-600' : 'text-slate-400'}`}>2. Seleziona Civico</span>
-                                            {ocrData.civico && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, civico: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}
-                                        </div>
+                                        <div className="flex justify-between items-center mb-1"><span className={`text-[10px] font-black uppercase ${ocrData.activeField === 'civico' ? 'text-blue-600' : 'text-slate-400'}`}>2. Seleziona Civico</span>{ocrData.civico && <button onClick={(e) => { e.stopPropagation(); setOcrData({...ocrData, civico: ''}); }} className="text-slate-400 hover:text-slate-800 p-1 bg-white rounded-full"><X size={14}/></button>}</div>
                                         <div className="font-black text-xl min-h-[1.75rem] uppercase text-slate-800">{ocrData.civico || <span className="text-slate-300 font-normal italic">Attendi tocco...</span>}</div>
                                     </div>
                                 </div>
                                 <div className="bg-white p-5 rounded-[2rem] shadow-inner border border-slate-200">
                                     <p className="text-[10px] font-black text-slate-400 uppercase mb-4 text-center tracking-widest"><Scan size={14} className="inline mr-1" /> Dati Letti</p>
                                     <div className="flex flex-wrap gap-2 justify-center">
-                                        {ocrData.tags.map((tag, i) => (
-                                            <button key={i} onClick={() => {
-                                                    setOcrData(prev => {
-                                                        if (prev.activeField === 'name') return { ...prev, name: prev.name ? prev.name + ' ' + tag : tag };
-                                                        else return { ...prev, civico: prev.civico ? prev.civico + ' ' + tag : tag };
-                                                    });
-                                                }} className="bg-slate-100 border border-slate-200 hover:bg-yellow-100 hover:border-yellow-300 text-slate-800 font-black px-4 py-3 rounded-2xl text-sm transition-colors uppercase active:scale-95 shadow-sm">
-                                                {tag}
-                                            </button>
-                                        ))}
+                                        {ocrData.tags.map((tag, i) => (<button key={i} onClick={() => { setOcrData(prev => { if (prev.activeField === 'name') return { ...prev, name: prev.name ? prev.name + ' ' + tag : tag }; else return { ...prev, civico: prev.civico ? prev.civico + ' ' + tag : tag }; }); }} className="bg-slate-100 border border-slate-200 hover:bg-yellow-100 hover:border-yellow-300 text-slate-800 font-black px-4 py-3 rounded-2xl text-sm transition-colors uppercase active:scale-95 shadow-sm">{tag}</button>))}
                                     </div>
-                                    {ocrData.tags.length === 0 && <p className="text-center text-slate-400 text-sm italic">Nessun testo leggibile trovato.</p>}
                                 </div>
-                                <div className="flex gap-4 pt-4">
-                                    <button onClick={() => { setView('street-detail'); setOcrData(null); }} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
-                                    <button onClick={() => {
-                                            setFormState({ name: ocrData.name.toUpperCase(), status: 'residente', civico: ocrData.civico.toUpperCase(), posCassetta: '' });
-                                            setFormMode({ type: 'add' }); setView('form'); setOcrData(null);
-                                        }} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform">
-                                        Vai al Form
-                                    </button>
-                                </div>
+                                <div className="flex gap-4 pt-4"><button onClick={() => { setView('street-detail'); setOcrData(null); }} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button><button onClick={() => { setFormState({ name: ocrData.name.toUpperCase(), status: 'residente', civico: ocrData.civico.toUpperCase(), posCassetta: '' }); setFormMode({ type: 'add' }); setView('form'); setOcrData(null); }} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform">Vai al Form</button></div>
                             </div>
                         )}
 
-                        {/* VISTA: REPORT / RIEPILOGO */}
                         {view === 'report' && (
                             <div className="space-y-4 animate-in fade-in duration-300">
-                                <div className="flex justify-between items-end mb-2">
-                                    <div>
-                                        <h2 className="text-3xl font-black italic uppercase leading-tight text-slate-800">Riepilogo Resi</h2>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posta da scartare in: {activeZone}</p>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><MapPin size={14} /></div>
-                                        <input type="text" placeholder="CERCA VIA..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={reportStreetFilter} onChange={(e) => setReportStreetFilter(e.target.value)} />
-                                    </div>
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Filter size={14} /></div>
-                                        <input type="text" placeholder="CIVICO..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={reportCivicoFilter} onChange={(e) => setReportCivicoFilter(e.target.value.toUpperCase())} />
-                                    </div>
-                                </div>
+                                <div className="flex justify-between items-end mb-2"><div><h2 className="text-3xl font-black italic uppercase leading-tight text-slate-800">Riepilogo Resi</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posta da scartare in: {activeZone}</p></div></div>
+                                <div className="grid grid-cols-2 gap-2 mt-2"><div className="relative"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><MapPin size={14} /></div><input type="text" placeholder="CERCA VIA..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={reportStreetFilter} onChange={(e) => setReportStreetFilter(e.target.value)} /></div><div className="relative"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Filter size={14} /></div><input type="text" placeholder="CIVICO..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={reportCivicoFilter} onChange={(e) => setReportCivicoFilter(e.target.value.toUpperCase())} /></div></div>
                                 <div className="space-y-4 mt-4">
                                     {reportData.length === 0 ? (
-                                        <div className="text-center py-20 opacity-30 bg-white rounded-3xl border border-slate-200">
-                                            <div className="flex justify-center mb-4 text-slate-400"><ClipboardList size={48} /></div>
-                                            <p className="font-black uppercase text-xs">Nessun reso trovato</p>
-                                        </div>
+                                        <div className="text-center py-20 opacity-30 bg-white rounded-3xl border border-slate-200"><div className="flex justify-center mb-4 text-slate-400"><ClipboardList size={48} /></div><p className="font-black uppercase text-xs">Nessun reso trovato</p></div>
                                     ) : (
                                         reportData.map((data, idx) => (
                                             <div key={idx} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-200 p-4">
@@ -870,13 +857,7 @@
                                                             <div className="flex-1 space-y-2">
                                                                 {match.residents.map(r => (
                                                                     <div key={r.id} className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex justify-between items-center">
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                                <p className="font-black uppercase text-sm leading-none text-slate-700">{r.name}</p>
-                                                                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${r.status === 'sconosciuto' ? 'bg-red-100 text-red-700' : r.status === 'trasferito' ? 'bg-orange-100 text-orange-700' : r.status === 'irreperibile' ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-800'}`}>{r.status}</span>
-                                                                            </div>
-                                                                            {r.posCassetta && <span className="text-[9px] font-bold text-slate-400">Pos: {r.posCassetta}</span>}
-                                                                        </div>
+                                                                        <div className="flex flex-col gap-1"><div className="flex items-center gap-2 flex-wrap"><p className="font-black uppercase text-sm leading-none text-slate-700">{r.name}</p><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${r.status === 'sconosciuto' ? 'bg-red-100 text-red-700' : r.status === 'trasferito' ? 'bg-orange-100 text-orange-700' : r.status === 'irreperibile' ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-800'}`}>{r.status}</span></div>{r.posCassetta && <span className="text-[9px] font-bold text-slate-400">Pos: {r.posCassetta}</span>}</div>
                                                                         <span className="text-[8px] text-slate-300 font-bold bg-white px-2 py-1 rounded shadow-sm ml-2 whitespace-nowrap">{r.date}</span>
                                                                     </div>
                                                                 ))}
@@ -891,7 +872,8 @@
                             </div>
                         )}
 
-                        {/* VISTA: LISTA STRADE (DASHBOARD) */}
+                        {}
+                        {/* DASHBOARD CON PULSANTI */}
                         {view === 'list' && (
                             <div className="space-y-4">
                                 <div className="relative">
@@ -899,71 +881,50 @@
                                     <input type="text" placeholder="CERCA STRADA..." className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 outline-none font-bold uppercase" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                                 </div>
                                 
-                                {/* Pulsanti Inserimento Rapido */}
                                 <div className="grid grid-cols-2 gap-2 mb-2">
                                     <button onClick={() => { setQuickAddState({ street: '', civico: '', name: '', status: 'sconosciuto', photoCitofono: null }); setView('quick-add'); }} 
                                             className="w-full bg-blue-600 text-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-md active:scale-95 transition-all border border-blue-500">
-                                        <Zap size={24} className="text-yellow-300" />
-                                        <span className="font-black uppercase tracking-tight text-xs text-center">Persona<br/>Veloce</span>
+                                        <Zap size={24} className="text-yellow-300" /><span className="font-black uppercase tracking-tight text-xs text-center">Persona<br/>Veloce</span>
                                     </button>
                                     <button onClick={() => { setQuickPhotoState({ street: '', civico: '', type: 'citofono', photo: null }); setView('quick-photo'); }} 
                                             className="w-full bg-indigo-600 text-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-md active:scale-95 transition-all border border-indigo-500">
-                                        <Camera size={24} className="text-indigo-200" />
-                                        <span className="font-black uppercase tracking-tight text-xs text-center">Solo<br/>Foto Veloce</span>
+                                        <Database size={24} className="text-indigo-200" /><span className="font-black uppercase tracking-tight text-xs text-center">Solo Foto<br/>Database</span>
                                     </button>
                                 </div>
 
                                 <div className="grid gap-3">
                                     {filteredStreets.map(street => (
                                         <button key={street} onClick={() => { setActiveStreet(street); setView('street-detail'); }} className="bg-white p-5 rounded-2xl flex justify-between items-center shadow-sm active:scale-[0.98] transition-all border border-transparent hover:border-yellow-400">
-                                            <div className="text-left">
-                                                <p className="font-black text-xl italic text-slate-800">{street}</p>
-                                                <p className="text-slate-400 text-[10px] font-black uppercase">{Object.keys(data.zones[activeZone].streets[street].civici).length} Punti Mappati</p>
-                                            </div>
+                                            <div className="text-left"><p className="font-black text-xl italic text-slate-800">{street}</p><p className="text-slate-400 text-[10px] font-black uppercase">{Object.keys(data.zones[activeZone].streets[street].civici).length} Civici Registrati</p></div>
                                             <div className="text-slate-300"><ChevronRight /></div>
                                         </button>
                                     ))}
-                                    {filteredStreets.length === 0 && (
-                                        <div className="text-center py-20 opacity-30">
-                                            <div className="flex justify-center mb-2"><MapPin size={48} /></div>
-                                            <p className="font-black uppercase text-xs">Nessuna via trovata</p>
-                                        </div>
-                                    )}
+                                    {filteredStreets.length === 0 && <div className="text-center py-20 opacity-30"><div className="flex justify-center mb-2"><MapPin size={48} /></div><p className="font-black uppercase text-xs">Nessuna via trovata</p></div>}
                                 </div>
                             </div>
                         )}
 
-                        {/* VISTA: DETTAGLIO STRADA (CIVICI) */}
+                        {/* DETTAGLIO STRADA E DATABASE FOTO */}
                         {view === 'street-detail' && activeStreet && (
                             <div className="space-y-4 animate-in fade-in duration-300">
                                 <div className="flex justify-between items-end">
                                     <h2 className="text-3xl font-black italic uppercase leading-tight flex-1">{activeStreet}</h2>
-                                    <button onClick={() => { if(window.confirm("Eliminare questa via?")) { setData(prev => { const nd = {...prev}; delete nd.zones[activeZone].streets[activeStreet]; return nd; }); setView('list'); } }} className="text-slate-300 p-2"><Trash2 size={20} /></button>
+                                    <button onClick={() => { 
+                                        askConfirm("Eliminare questa via?", () => { 
+                                            setData(prev => { const nd = {...prev}; delete nd.zones[activeZone].streets[activeStreet]; return nd; }); setView('list'); 
+                                        }); 
+                                    }} className="text-slate-300 p-2"><Trash2 size={20} /></button>
                                 </div>
-                                
-                                {/* Suggerimento per i multi-civici */}
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-200 px-3 py-1 rounded-full inline-block">Cerca "14" per trovare anche "12, 14, 16"</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-200 px-3 py-1 rounded-full inline-block">Cerca "14" per trovare anche "12, 14"</p>
                                 
                                 <div className="grid grid-cols-2 gap-2 mt-2">
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Filter size={14} /></div>
-                                        <input type="text" placeholder="CIVICO (ES: 12)..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={civicoFilter} onChange={(e) => setCivicoFilter(e.target.value.toUpperCase())} />
-                                    </div>
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Search size={14} /></div>
-                                        <input type="text" placeholder="NOME..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} />
-                                    </div>
+                                    <div className="relative"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Filter size={14} /></div><input type="text" placeholder="CIVICO (ES: 12)..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={civicoFilter} onChange={(e) => setCivicoFilter(e.target.value.toUpperCase())} /></div>
+                                    <div className="relative"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Search size={14} /></div><input type="text" placeholder="NOME..." className="w-full pl-9 pr-2 py-3 bg-white rounded-xl shadow-inner font-black text-sm uppercase" value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} /></div>
                                 </div>
 
                                 <div className="flex gap-2 mt-4">
-                                    <button onClick={() => { setFormState({ name: '', status: 'residente', civico: civicoFilter, posCassetta: '' }); setFormMode({ type: 'add' }); setView('form'); }}
-                                        className="flex-[1] py-4 bg-slate-900 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-xs">
-                                        <UserPlus size={16} /> A MANO
-                                    </button>
-                                    <button onClick={() => setShowInputMenu(true)}
-                                        className="flex-[2] py-4 bg-blue-600 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-sm">
-                                        <Zap size={20} className="text-yellow-300" /> LETTURA VELOCE
-                                    </button>
+                                    <button onClick={() => { setFormState({ name: '', status: 'residente', civico: civicoFilter, posCassetta: '' }); setFormMode({ type: 'add' }); setView('form'); }} className="flex-[1] py-4 bg-slate-900 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-xs"><UserPlus size={16} /> A MANO</button>
+                                    <button onClick={() => setShowInputMenu(true)} className="flex-[2] py-4 bg-blue-600 text-white rounded-3xl font-black shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform text-sm"><Zap size={20} className="text-yellow-300" /> LETTURA VELOCE</button>
                                 </div>
 
                                 <div className="space-y-8 mt-6">
@@ -971,52 +932,16 @@
                                         const civicoData = data.zones[activeZone].streets[activeStreet].civici[cNum];
                                         return (
                                             <div key={cNum} className="bg-white rounded-[2rem] overflow-hidden shadow-md border border-slate-200">
-                                                {/* INTESTAZIONE CIVICO */}
                                                 <div className="bg-slate-900 text-white p-3 flex justify-between items-center relative z-10 shadow-md">
                                                     <span className="font-black italic text-lg ml-2">CIVICO {cNum}</span>
-                                                    <div className="flex gap-1">
-                                                        <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold">{civicoData.residents.length} Nomi</span>
-                                                    </div>
+                                                    <div className="flex gap-1"><span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold">{civicoData.residents.length} Nomi</span></div>
                                                 </div>
 
-                                                {/* ZONA DOPPIA FOTO (Citofono / Cassette) */}
                                                 <div className="grid grid-cols-2 h-28 bg-slate-100 divide-x-2 divide-white">
-                                                    {/* FOTO CITOFONO */}
-                                                    <div className="relative group">
-                                                        {civicoData.photoCitofono ? (
-                                                            <>
-                                                                <img src={civicoData.photoCitofono} className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" alt="citofono" onClick={() => setZoomedImage({ photo: civicoData.photoCitofono, date: civicoData.dateCitofono, type: 'citofono' })} />
-                                                                <div className="absolute top-1 left-2 bg-black/60 px-2 py-0.5 rounded text-[8px] font-black text-white pointer-events-none">CITOFONO</div>
-                                                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Rimuovere foto citofono?')) updateCivicoPhoto(cNum, 'citofono', null, null); }} className="absolute bottom-1 right-1 bg-red-500/90 text-white p-1.5 rounded-lg active:scale-90"><Trash2 size={12} /></button>
-                                                            </>
-                                                        ) : (
-                                                            <label className="w-full h-full flex flex-col items-center justify-center text-slate-400 hover:bg-slate-200 transition-colors cursor-pointer active:bg-slate-300">
-                                                                <ImageIcon size={24} className="mb-1 opacity-50" />
-                                                                <span className="text-[9px] font-black uppercase tracking-tight">+ Foto Citofono</span>
-                                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64, date) => updateCivicoPhoto(cNum, 'citofono', base64, date))} />
-                                                            </label>
-                                                        )}
-                                                    </div>
-
-                                                    {/* FOTO CASSETTE */}
-                                                    <div className="relative group">
-                                                        {civicoData.photoCassette ? (
-                                                            <>
-                                                                <img src={civicoData.photoCassette} className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity" alt="cassette" onClick={() => setZoomedImage({ photo: civicoData.photoCassette, date: civicoData.dateCassette, type: 'cassette' })} />
-                                                                <div className="absolute top-1 left-2 bg-black/60 px-2 py-0.5 rounded text-[8px] font-black text-yellow-400 pointer-events-none">CASSETTE</div>
-                                                                <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Rimuovere foto cassette?')) updateCivicoPhoto(cNum, 'cassette', null, null); }} className="absolute bottom-1 right-1 bg-red-500/90 text-white p-1.5 rounded-lg active:scale-90"><Trash2 size={12} /></button>
-                                                            </>
-                                                        ) : (
-                                                            <label className="w-full h-full flex flex-col items-center justify-center text-slate-400 hover:bg-slate-200 transition-colors cursor-pointer active:bg-slate-300">
-                                                                <Mailbox size={24} className="mb-1 opacity-50" />
-                                                                <span className="text-[9px] font-black uppercase tracking-tight">+ Foto Cassette</span>
-                                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => processImageFile(e.target.files[0], (base64, date) => updateCivicoPhoto(cNum, 'cassette', base64, date))} />
-                                                            </label>
-                                                        )}
-                                                    </div>
+                                                    <DbPhoto zone={activeZone} street={activeStreet} civico={cNum} type="citofono" askConfirm={askConfirm} onZoom={setZoomedImage} />
+                                                    <DbPhoto zone={activeZone} street={activeStreet} civico={cNum} type="cassette" askConfirm={askConfirm} onZoom={setZoomedImage} />
                                                 </div>
 
-                                                {/* LISTA RESIDENTI */}
                                                 <div className="divide-y divide-slate-100 bg-white">
                                                     {civicoData.residents.map(res => (
                                                         <div key={res.id} className="py-3 px-4 flex justify-between items-center group active:bg-slate-50">
@@ -1043,68 +968,36 @@
                             </div>
                         )}
 
-                        {/* VISTA: FORM INSERIMENTO/MODIFICA (Specifico Civico) */}
+                        {}
                         {view === 'form' && (
                             <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-10 duration-300">
                                 <h2 className="text-2xl font-black italic uppercase text-slate-900 mb-6">{formMode?.type === 'edit' ? 'Modifica Scheda' : 'Nuovo Ingresso'}</h2>
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es: 12, 14)</label>
-                                            <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" placeholder="12, 14" value={formState.civico} onChange={(e) => setFormState({...formState, civico: e.target.value.toUpperCase()})} />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Pos. Cassetta</label>
-                                            <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 text-center uppercase" placeholder="ES: 2/1" value={formState.posCassetta || ''} onChange={(e) => setFormState({...formState, posCassetta: e.target.value})} />
-                                        </div>
+                                        <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Civico/i (es: 12, 14)</label><input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 uppercase" placeholder="12, 14" value={formState.civico} onChange={(e) => setFormState({...formState, civico: e.target.value.toUpperCase()})} /></div>
+                                        <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Pos. Cassetta</label><input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-xl border-none ring-1 ring-slate-200 text-center uppercase" placeholder="ES: 2/1" value={formState.posCassetta || ''} onChange={(e) => setFormState({...formState, posCassetta: e.target.value})} /></div>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome/Cognome / Ditta</label>
-                                        <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200" placeholder="ROSSI MARIO" value={formState.name} onChange={(e) => setFormState({...formState, name: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 text-center">Stato della Consegna</label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {['residente', 'sconosciuto', 'trasferito', 'irreperibile', 'deceduto'].map(st => <StatusButton key={st} status={st} current={formState.status} onClick={(s) => setFormState({...formState, status: s})} />)}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 pt-6 border-t border-slate-100">
-                                        <button onClick={() => setView('street-detail')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button>
-                                        <button onClick={handleSaveResident} className="flex-[2] py-4 bg-yellow-400 text-black rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform">Conferma Dati</button>
-                                    </div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nome/Cognome / Ditta</label><input type="text" className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase border-none ring-1 ring-slate-200" placeholder="ROSSI MARIO" value={formState.name} onChange={(e) => setFormState({...formState, name: e.target.value})} /></div>
+                                    <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-3 text-center">Stato della Consegna</label><div className="grid grid-cols-2 gap-2">{['residente', 'sconosciuto', 'trasferito', 'irreperibile', 'deceduto'].map(st => <StatusButton key={st} status={st} current={formState.status} onClick={(s) => setFormState({...formState, status: s})} />)}</div></div>
+                                    <div className="flex gap-4 pt-6 border-t border-slate-100"><button onClick={() => setView('street-detail')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Annulla</button><button onClick={handleSaveResident} className="flex-[2] py-4 bg-yellow-400 text-black rounded-2xl font-black shadow-xl uppercase tracking-tighter active:scale-95 transition-transform">Conferma Dati</button></div>
                                 </div>
                             </div>
                         )}
 
-                        {/* VISTA: AGGIUNGI STRADA */}
                         {view === 'add-street' && (
                             <div className="bg-white p-8 rounded-[3rem] shadow-2xl space-y-6 border border-slate-100">
-                                <div>
-                                    <h2 className="text-3xl font-black italic uppercase leading-none mb-2">Aggiungi Via</h2>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Giro in: {activeZone}</p>
-                                </div>
+                                <div><h2 className="text-3xl font-black italic uppercase leading-none mb-2">Aggiungi Via</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Giro in: {activeZone}</p></div>
                                 <input id="new-street-input" type="text" className="w-full p-5 bg-slate-50 rounded-3xl border-none ring-2 ring-slate-100 text-2xl uppercase font-black italic text-slate-900 focus:ring-yellow-400 outline-none" placeholder="ES: VIA BOLOGNA" autoFocus />
-                                <div className="flex gap-4">
-                                    <button onClick={() => setView('list')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Chiudi</button>
-                                    <button onClick={() => addStreet(document.getElementById('new-street-input').value)} className="flex-[2] py-4 bg-slate-900 text-white rounded-3xl font-black shadow-xl uppercase">Mappa Strada</button>
-                                </div>
+                                <div className="flex gap-4"><button onClick={() => setView('list')} className="flex-1 py-4 font-black text-slate-400 text-xs uppercase">Chiudi</button><button onClick={() => addStreet(document.getElementById('new-street-input').value)} className="flex-[2] py-4 bg-slate-900 text-white rounded-3xl font-black shadow-xl uppercase">Mappa Strada</button></div>
                             </div>
                         )}
                     </main>
 
-                    {/* NAVIGAZIONE INFERIORE */}
+                    {}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-4 pb-10 flex justify-around items-center z-[80] shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
-                        <button onClick={() => { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); }} className={`flex flex-col items-center gap-1 transition-colors ${view === 'list' || view === 'quick-add' ? 'text-slate-900' : 'text-slate-400'}`}>
-                            <div><Home size={22} /></div>
-                            <span className="text-[9px] font-black uppercase italic">Dashboard</span>
-                        </button>
-                        <button onClick={() => setView('add-street')} className="bg-yellow-400 text-black p-4 rounded-3xl -mt-16 shadow-2xl border-4 border-slate-50 active:scale-90 transition-transform flex items-center justify-center">
-                            <div><Plus size={32} strokeWidth={3} /></div>
-                        </button>
-                        <button onClick={() => { setView('report'); setReportStreetFilter(''); setReportCivicoFilter(''); }} className={`flex flex-col items-center gap-1 transition-colors ${view === 'report' ? 'text-slate-900' : 'text-slate-400'}`}>
-                            <div><ClipboardList size={22} /></div>
-                            <span className="text-[9px] font-black uppercase italic">Riepilogo</span>
-                        </button>
+                        <button onClick={() => { setView('list'); setActiveStreet(null); setCivicoFilter(''); setNameFilter(''); }} className={`flex flex-col items-center gap-1 transition-colors ${view === 'list' || view === 'quick-add' || view === 'quick-photo' ? 'text-blue-600' : 'text-slate-400'}`}><div><Home size={22} /></div><span className="text-[9px] font-black uppercase italic">Dashboard</span></button>
+                        <button onClick={() => setView('add-street')} className="bg-yellow-400 text-black p-4 rounded-3xl -mt-16 shadow-2xl border-4 border-slate-50 active:scale-90 transition-transform flex items-center justify-center"><div><Plus size={32} strokeWidth={3} /></div></button>
+                        <button onClick={() => { setView('report'); setReportStreetFilter(''); setReportCivicoFilter(''); }} className={`flex flex-col items-center gap-1 transition-colors ${view === 'report' ? 'text-slate-900' : 'text-slate-400'}`}><div><ClipboardList size={22} /></div><span className="text-[9px] font-black uppercase italic">Riepilogo</span></button>
                     </nav>
                 </div>
             );
